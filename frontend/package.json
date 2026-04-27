@@ -1,0 +1,18 @@
+{
+  "name": "patasoft-frontend",
+  "version": "1.0.0",
+  "description": "PataSoft Frontend - Vite + Vanilla JS",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:local": "vite --config vite.config.dev.js --port 5173",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

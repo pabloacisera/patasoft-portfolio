@@ -1,0 +1,1 @@
+zip complete_app.zip . -r -x "*/node_modules*" -x "*/venv*" -x "*/dist*" -x "*/build*"

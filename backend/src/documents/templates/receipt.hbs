@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Helvetica', sans-serif; color: #333; margin: 0; padding: 0; }
+        .container { padding: 40px; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #2ecc71; padding-bottom: 20px; }
+        .company-info h1 { margin: 0; color: #2ecc71; }
+        .receipt-info { text-align: right; }
+        .details { margin-top: 30px; }
+        .details table { width: 100%; border-collapse: collapse; }
+        .details th { background: #f8f9fa; text-align: left; padding: 12px; border-bottom: 2px solid #dee2e6; }
+        .details td { padding: 12px; border-bottom: 1px solid #dee2e6; }
+        .total-section { margin-top: 30px; text-align: right; font-size: 1.2em; }
+        .footer { margin-top: 50px; text-align: center; color: #777; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="company-info">
+                <h1>{{companyName}}</h1>
+                <p>{{companyAddress}}<br>{{companyPhone}}</p>
+            </div>
+            <div class="receipt-info">
+                <h2>COMPROBANTE DE PAGO</h2>
+                <p>Nº: {{receiptNumber}}<br>Fecha: {{date}}</p>
+            </div>
+        </div>
+
+        <div class="details">
+            <h3>Cliente: {{clientName}}</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Descripción</th>
+                        <th>Cant.</th>
+                        <th>P. Unitario</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each items}}
+                    <tr>
+                        <td>{{description}}</td>
+                        <td>{{quantity}}</td>
+                        <td>${{unitPrice}}</td>
+                        <td>${{totalPrice}}</td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="total-section">
+            <p><strong>Total: ${{totalAmount}}</strong></p>
+            <p>Método de pago: {{method}}</p>
+            <p>Estado: {{status}}</p>
+        </div>
+
+        <div class="footer">
+            <p>Gracias por confiar en {{companyName}}</p>
+            <p>Este documento es un comprobante de pago interno.</p>
+        </div>
+    </div>
+</body>
+</html>

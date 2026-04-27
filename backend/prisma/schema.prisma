@@ -1,0 +1,485 @@
+// PataSoft - Schema de Base de Datos
+// Generado con Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// EMPRESA / VETERINARIA
+// ============================================
+
+model Company {
+  id                String    @id @default(cuid())
+  name              String
+  slug              String    @unique
+  legalName         String?
+  cuit              String    @unique
+  municipalLicense  String?
+  address           String
+  phone             String?
+  email             String?
+  website           String?
+  logoUrl           String?
+  cloudinaryFolder  String?
+  animalSpecialties String[]  // ["dogs","cats","horses","general"]
+  isGeneral         Boolean   @default(true)
+  isBlocked         Boolean   @default(false)
+  blockedReason     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  users             User[]
+  clients           Client[]
+  pets              Pet[]
+  payments          Payment[]
+  supplies          Supply[]
+  documents         Document[]
+  notifications    Notification[]
+  subscription     Subscription?
+  config            CompanyConfig?
+  connectionsA     CompanyConnection[] @relation("CompanyA")
+  connectionsB     CompanyConnection[] @relation("CompanyB")
+  priceItems       PriceItem[]
+  debts            Debt[]
+}
+
+model CompanyConfig {
+  id                 String   @id @default(cuid())
+  companyId          String   @unique
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  currency           String   @default("ARS")
+  defaultAIModel     String   @default("llama-3.3-70b-versatile")
+  lowStockDefaultPct Int      @default(10)
+  debtAlertDays      Int[]    @default([1, 2])
+  notifyEmail        Boolean  @default(true)
+  notifyInApp        Boolean  @default(true)
+  mpAccessToken     String?  // Encriptado
+  mpPublicKey      String?
+  mpRefreshToken   String?
+  onboardComplete  Boolean  @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// ============================================
+// USUARIO
+// ============================================
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  passwordHash String?  // null si es OAuth
+  name        String
+  role        UserRole  @default(USER)
+  googleId    String?   @unique
+  avatarUrl   String?
+  isActive   Boolean   @default(true)
+  companyId  String?
+  company   Company?  @relation(fields: [companyId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  refreshTokens  RefreshToken[]
+  notifications Notification[]
+}
+
+enum UserRole {
+  GUEST
+  USER
+  ADMIN_COMPANY
+  STAFF
+  SUPER_ADMIN
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// ============================================
+// SUSCRIPCIÓN
+// ============================================
+
+model Subscription {
+  id              String             @id @default(cuid())
+  companyId       String             @unique
+  company        Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan           SubscriptionPlan
+  status         SubscriptionStatus @default(TRIAL)
+  mpSubscriptionId String?
+  mpPreapprovalId String?
+  startedAt      DateTime           @default(now())
+  expiresAt      DateTime?
+  trialEndsAt    DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+enum SubscriptionPlan {
+  TRIAL
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  BLOCKED
+  CANCELLED
+}
+
+// ============================================
+// CLIENTE (dueño de mascota)
+// ============================================
+
+model Client {
+  id          String    @id @default(cuid())
+  companyId   String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name       String
+  lastName   String?
+  dni        String?
+  cuil       String?
+  email      String?
+  phone      String?
+  address    String?
+  isCompany Boolean   @default(false)
+  companyName String?
+  notes     String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  pets     Pet[]
+  payments Payment[]
+  debts    Debt[]
+}
+
+// ============================================
+// MASCOTA
+// ============================================
+
+model Pet {
+  id          String    @id @default(cuid())
+  companyId   String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientId   String?
+  client    Client?   @relation(fields: [clientId], references: [id])
+  name      String
+  species   String    // dog, cat, horse, bird, rabbit, reptile, other
+  breed     String?
+  gender    String?   // male, female, unknown
+  birthDate DateTime?
+  weight    Float?
+  color     String?
+  microchipId String?
+  isNeutered Boolean   @default(false)
+  notes     String?
+  photos    PetPhoto[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  medicalRecords MedicalRecord[]
+  payments     Payment[]
+}
+
+model PetPhoto {
+  id             String   @id @default(cuid())
+  petId          String
+  pet            Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  cloudinaryUrl  String
+  cloudinaryId   String
+  isPrimary     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+// ============================================
+// HISTORIAL MÉDICO
+// ============================================
+
+model MedicalRecord {
+  id              String    @id @default(cuid())
+  petId           String
+  pet             Pet       @relation(fields: [petId], references: [id], onDelete: Cascade)
+  date            DateTime  @default(now())
+  visitReason     String
+  diagnosis     String?
+  treatment     String?
+  observations  String?
+  weight        Float?
+  temperature   Float?
+  nextVisitDate  DateTime?
+  veterinarianId String?   // userId
+  audioNoteUrl   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  procedures   Procedure[]
+  prescriptions Prescription[]
+  payment     Payment?
+}
+
+model Procedure {
+  id              String        @id @default(cuid())
+  medicalRecordId String
+  medicalRecord MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  priceItemId     String?
+  priceItem       PriceItem?  @relation(fields: [priceItemId], references: [id])
+  customPrice    Float?
+  quantity       Int          @default(1)
+  createdAt      DateTime    @default(now())
+}
+
+model Prescription {
+  id              String        @id @default(cuid())
+  medicalRecordId String
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  supplyId        String?
+  supply         Supply?       @relation(fields: [supplyId], references: [id])
+  medicineName   String
+  dose           String?
+  frequency      String?
+  duration      String?
+  soldInClinic   Boolean       @default(false)
+  quantity      Int           @default(1)
+  createdAt      DateTime      @default(now())
+}
+
+// ============================================
+// PRECIOS DE CONSULTAS
+// ============================================
+
+model PriceItem {
+  id          String   @id @default(cuid())
+  companyId   String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name       String
+  category   String   // consultation, surgery, vaccine, lab, imaging, other
+  price      Float
+  description String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  procedures Procedure[]
+}
+
+// ============================================
+// PAGOS
+// ============================================
+
+model Payment {
+  id              String        @id @default(cuid())
+  companyId       String
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientId        String?
+  client         Client?       @relation(fields: [clientId], references: [id])
+  petId           String?
+  pet            Pet?          @relation(fields: [petId], references: [id])
+  medicalRecordId String?       @unique
+  medicalRecord  MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
+  totalAmount    Float
+  paidAmount    Float         @default(0)
+  status        PaymentStatus @default(PENDING)
+  method        PaymentMethod?
+  mpPaymentId   String?
+  notes        String?
+  dueDate      DateTime?
+  paidAt       DateTime?
+  cloudinaryUrl String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  items        PaymentItem[]
+  debt         Debt?
+}
+
+model PaymentItem {
+  id          String   @id @default(cuid())
+  paymentId   String
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int      @default(1)
+  unitPrice   Float
+  totalPrice  Float
+  itemType   String   // procedure, supply, consultation, other
+  createdAt  DateTime @default(now())
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  DEFERRED
+  CANCELLED
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  MP_QR
+  MP_CHECKOUT
+  CHECK
+  OTHER
+}
+
+// ============================================
+// DEUDAS / CUENTA CORRIENTE
+// ============================================
+
+model Debt {
+  id            String     @id @default(cuid())
+  companyId     String
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientId     String
+  client      Client     @relation(fields: [clientId], references: [id])
+  paymentId   String?    @unique
+  payment     Payment?   @relation(fields: [paymentId], references: [id])
+  amount      Float
+  status      DebtStatus  @default(PENDING)
+  dueDate     DateTime
+  alertSent1Day Boolean   @default(false)
+  alertSent2Day Boolean  @default(false)
+  cancelledAt DateTime?
+  cancelledBy String?
+  paidAt     DateTime?
+  cloudinaryUrl String?
+  notes      String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+enum DebtStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// ============================================
+// INSUMOS / STOCK
+// ============================================
+
+model Supply {
+  id            String    @id @default(cuid())
+  companyId     String
+  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  brand        String?
+  category    String?   // medicine, equipment, consumable, other
+  unit         String?   // ml, mg, units, boxes
+  quantity    Int       @default(0)
+  minQuantity  Int?      // si null, se calcula 10% del inicial
+  initialQty  Int?
+  unitPrice   Float     @default(0)
+  description String?
+  expiresAt   DateTime?
+  isActive   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  prescriptions Prescription[]
+}
+
+// ============================================
+// DOCUMENTOS
+// ============================================
+
+model Document {
+  id              String       @id @default(cuid())
+  companyId       String
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type           DocumentType
+  name           String
+  cloudinaryUrl  String
+  cloudinaryId  String
+  folder       String
+  relatedEntityId String?
+  relatedEntity String?
+  createdAt    DateTime     @default(now())
+}
+
+enum DocumentType {
+  PAYMENT_RECEIPT
+  DEBT_RECORD
+  SUPPLY_EXCEL
+  PRICE_LIST
+  RAG_DOCUMENT
+  EXPORT_EXCEL
+  EXPORT_PDF
+  ACCOUNT_STATEMENT
+}
+
+// ============================================
+// NOTIFICACIONES
+// ============================================
+
+model Notification {
+  id          String           @id @default(cuid())
+  companyId   String
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?            @relation(fields: [userId], references: [id])
+  type       NotificationType
+  title      String
+  message    String
+  isRead     Boolean          @default(false)
+  data       Json?
+  expiresAt  DateTime?
+  createdAt  DateTime         @default(now())
+}
+
+enum NotificationType {
+  STOCK_LOW
+  DEBT_DUE
+  DEBT_OVERDUE
+  CONNECTION_REQUEST
+  CONNECTION_ACCEPTED
+  CONNECTION_REJECTED
+  SUBSCRIPTION_EXPIRING
+  SUBSCRIPTION_EXPIRED
+  MIGRATION_COMPLETE
+  ONBOARDING_INCOMPLETE
+  DOCUMENT_READY
+  SYSTEM
+}
+
+// ============================================
+// CONEXIONES ENTRE VETERINARIAS
+// ============================================
+
+model CompanyConnection {
+  id            String           @id @default(cuid())
+  companyAId    String
+  companyA     Company          @relation("CompanyA", fields: [companyAId], references: [id])
+  companyBId   String
+  companyB    Company          @relation("CompanyB", fields: [companyBId], references: [id])
+  status       ConnectionStatus @default(PENDING)
+  requestedBy String
+  respondedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([companyAId, companyBId])
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  BLOCKED
+}

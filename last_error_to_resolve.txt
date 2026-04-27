@@ -1,0 +1,27 @@
+- el banner no es un modal, y cuado se pinta mueve y desconfigura todo los componentes, porque no tiene z-index supongo
+- responde: porque aparecio solo una vez?, deberia aparecer hasta que se subscriba;
+- debes verificar si el sistema se bloquea para es cuil luego de tres dias?
+- cuando queremos ver los planes de subscripcion dice: [vite] connecting... client:495:9
+[vite] connected. client:618:15
+[API] Request: /companies/me token: eyJhbGciOiJIUzI1NiIs... api.js:22:24
+GET
+http://localhost:5173/favicon.ico
+[HTTP/1.1 404 Not Found 0ms]
+
+[API] Response: /companies/me 
+Object { id: "cmogcbt1e0002mwxwz889s82w", name: "El Relincho", slug: "el-relincho", legalName: "S.A", cuit: "20-32908989-5", municipalLicense: null, address: "Calle S/N, Barrio Center, Reconquista", phone: "+5493482278591", email: "cisera.pablo@gmail.com", website: "", … }
+api.js:90:24
+Uncaught (in promise) TypeError: can't access property "innerHTML", content is null
+    renderSettingsPage dashboard.js:1484
+    renderSettingsSubscription dashboard.js:238
+    render main.js:29
+    promise callback*render main.js:29
+    handle router.js:20
+    navigate router.js:6
+    initApp main.js:102
+    async* main.js:105
+dashboard.js:1484:32
+
+​
+
+- el boton de configuracion no hace nada, no abre nada, ni muestra ningun error
