@@ -9,6 +9,7 @@ export class CreatePaymentDto {
   @IsEnum(['CASH', 'TRANSFER', 'MP_QR', 'MP_CHECKOUT', 'CHECK', 'OTHER']) method?: string;
   @IsDateString() dueDate?: string;
   @IsString() notes?: string;
+  @IsOptional() @IsNumber() interestRate?: number; // % mensual
   items?: { description: string; quantity: number; unitPrice: number; totalPrice: number; itemType: string }[];
 }
 

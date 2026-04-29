@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #333; }
+    h1 { color: #2d6a4f; font-size: 24px; margin-bottom: 4px; }
+    h2 { color: #40916c; font-size: 18px; margin-top: 20px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    .header { text-align: center; margin-bottom: 20px; }
+    .company { color: #555; font-size: 14px; }
+    .section { margin-bottom: 16px; }
+    .label { color: #666; font-size: 11px; }
+    .value { font-weight: bold; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th { background: #f0f0f0; padding: 6px; text-align: left; font-size: 11px; }
+    td { padding: 6px; border-bottom: 1px solid #eee; font-size: 11px; }
+    .status-paid { color: #40916c; }
+    .status-pending { color: #d00000; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Historial Médico</h1>
+    <div class="company">{{companyName}} - {{companyAddress}}</div>
+  </div>
+
+  <h2>Datos de la Mascota</h2>
+  <div class="section">
+    <div><span class="label">Nombre:</span> <span class="value">{{petName}}</span></div>
+    <div><span class="label">Especie:</span> {{species}} · <span class="label">Raza:</span> {{breed}}</div>
+    <div><span class="label">Edad:</span> {{age}} · <span class="label">Peso:</span> {{weight}} kg</div>
+    <div><span class="label">Color:</span> {{color}} · <span class="label">Microchip:</span> {{microchip}}</div>
+    <div><span class="label">Castrado:</span> {{#if isNeutered}}Sí{{else}}No{{/if}}</div>
+    {{#if notes}}<div><span class="label">Notas:</span> {{notes}}</div>{{/if}}
+  </div>
+
+  <h2>Datos del Cliente</h2>
+  <div class="section">
+    <div><span class="label">Nombre:</span> <span class="value">{{clientName}} {{clientLastName}}</span></div>
+    <div><span class="label">Teléfono:</span> {{clientPhone}}</div>
+    <div><span class="label">Email:</span> {{clientEmail}}</div>
+  </div>
+
+  <h2>Historial de Consultas</h2>
+  <div class="section">
+    {{#if records.length}}
+      {{#each records}}
+        <div style="margin-bottom:12px; border:1px solid #eee; padding:8px; border-radius:4px;">
+          <div><span class="label">Fecha:</span> <strong>{{date}}</strong></div>
+          <div><span class="label">Motivo:</span> {{visitReason}}</div>
+          {{#if diagnosis}}<div><span class="label">Diagnóstico:</span> {{diagnosis}}</div>{{/if}}
+          {{#if treatment}}<div><span class="label">Tratamiento:</span> {{treatment}}</div>{{/if}}
+          {{#if procedures.length}}
+            <div style="margin-top:6px;"><span class="label">Procedimientos:</span>
+              <ul style="margin:4px 0; padding-left:20px;">
+                {{#each procedures}}
+                  <li>{{name}} - ${{price}}</li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if prescriptions.length}}
+            <div style="margin-top:6px;"><span class="label">Medicación:</span>
+              <ul style="margin:4px 0; padding-left:20px;">
+                {{#each prescriptions}}
+                  <li>{{medicineName}} - {{dose}} ({{duration}})</li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+        </div>
+      {{/each}}
+    {{else}}
+      <em>No hay consultas registradas.</em>
+    {{/if}}
+  </div>
+
+  <h2>Estado de Cuenta</h2>
+  <div class="section">
+    {{#if payments.length}}
+      <div><span class="label">Pagos realizados:</span></div>
+      <table>
+        <tr><th>Fecha</th><th>Monto</th><th>Método</th><th>Estado</th></tr>
+        {{#each payments}}
+          <tr>
+            <td>{{date}}</td>
+            <td>${{amountValue}}</td>
+            <td>{{method}}</td>
+            <td class="status-{{status}}">{{status}}</td>
+          </tr>
+        {{/each}}
+      </table>
+    {{/if}}
+    {{#if debts.length}}
+      <div style="margin-top:8px;"><span class="label">Deudas:</span></div>
+      <table>
+        <tr><th>Monto</th><th>Vencimiento</th><th>Estado</th></tr>
+        {{#each debts}}
+          <tr>
+            <td>${{amountValue}}</td>
+            <td>{{dueDate}}</td>
+            <td class="status-{{status}}">{{status}}</td>
+          </tr>
+        {{/each}}
+      </table>
+    {{/if}}
+  </div>
+
+  <div style="text-align:center;margin-top:30px;color:#999;font-size:10px;">
+    Generado el {{generatedAt}}
+  </div>
+</body>
+</html>

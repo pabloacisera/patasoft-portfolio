@@ -75,44 +75,118 @@ export class MercadopagoService {
 
   async createQrPayment(companyId: string, dto: QrPaymentDto) {
     const configRec = await this.prisma.companyConfig.findUnique({ where: { companyId } });
-    if (!configRec?.mpAccessToken) throw new BadRequestException('MercadoPago no configurado');
-    if (!configRec?.mpPublicKey) throw new BadRequestException('Public key no configurada');
+    if (!configRec?.mpAccessToken) throw new BadRequestException('MercadoPago no configurado para esta empresa');
+    if (!configRec?.mpUserId) throw new BadRequestException('User ID de MercadoPago no encontrado. Reconectá tu cuenta.');
 
     const payment = await this.prisma.payment.findFirst({
       where: { id: dto.paymentId, companyId },
-      include: { client: true },
+      include: { client: true, items: true },
     });
     if (!payment) throw new NotFoundException('Pago no encontrado');
 
-    const payload = {
-      transaction_amount: dto.amount,
-      description: dto.description || `PagoVeterinaria #${payment.id.slice(-6)}`,
-      payment_method_id: 'QR',
-      payer: {
-        email: payment.client?.email || 'test@test.com',
-        identification: payment.client?.dni ? { type: 'DNI', number: payment.client.dni } : undefined,
-      },
+    const externalPosId = `pos_${companyId.slice(-8)}`;
+    
+    const qrPayload = {
       external_reference: payment.id,
-      notification_url: `${this.config.get('BACKEND_URL')}/api/v1/mercadopago/webhook`,
+      title: dto.description || `Pago Veterinaria #${payment.id.slice(-6)}`,
+      description: dto.description || `Servicios veterinarios`,
+      notification_url: `${this.config.get('BACKEND_URL')}/api/v1/payments/webhook`,
+      total_amount: dto.amount || payment.totalAmount,
+      items: payment.items?.length ? payment.items.map(item => ({
+        sku_number: item.id.slice(-8),
+        category: 'services',
+        title: item.description,
+        description: item.description,
+        unit_price: item.unitPrice,
+        quantity: item.quantity,
+        unit_measure: 'unit',
+        total_amount: item.totalPrice,
+      })) : [{
+        sku_number: 'SRV001',
+        category: 'services',
+        title: dto.description || 'Servicio veterinario',
+        description: dto.description || 'Servicio veterinario',
+        unit_price: dto.amount || payment.totalAmount,
+        quantity: 1,
+        unit_measure: 'unit',
+        total_amount: dto.amount || payment.totalAmount,
+      }],
+      cash_out: { amount: 0 },
     };
 
-    const response = await fetch(`${MP_BASE_URL}/instore/qr/${configRec.mpPublicKey}/payments`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${configRec.mpAccessToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    const mpUserId = configRec.mpUserId;
+    let accessToken = configRec.mpAccessToken;
+
+    const makeRequest = async (token: string) => {
+      return fetch(
+        `https://api.mercadopago.com/instore/orders/qr/seller/collectors/${mpUserId}/pos/${externalPosId}/qrs`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(qrPayload),
+        }
+      );
+    };
+
+    let response = await makeRequest(accessToken);
+
+    if (response.status === 401) {
+      try {
+        accessToken = await this.refreshOAuthToken(companyId);
+        response = await makeRequest(accessToken);
+      } catch { throw new BadRequestException('Token de MercadoPago expirado. Reconectá tu cuenta.'); }
+    }
 
     if (!response.ok) {
-      const error = await response.text();
-      this.logger.error(`Error creating QR payment: ${error}`);
-      throw new BadRequestException('Error al crear pago QR');
+      const errorText = await response.text();
+      this.logger.error(`Error QR MP: ${errorText}`);
+      
+      if (errorText.includes('pos') || errorText.includes('404') || response.status === 404) {
+        await this.ensurePosExists(companyId, mpUserId, externalPosId, accessToken);
+        response = await makeRequest(accessToken);
+        if (!response.ok) {
+          const err2 = await response.text();
+          this.logger.error(`Error QR MP (retry): ${err2}`);
+          throw new BadRequestException('Error al generar código QR de MercadoPago');
+        }
+      } else {
+        throw new BadRequestException('Error al generar código QR de MercadoPago');
+      }
     }
 
     const result = await response.json();
-    return { qrToken: result.qr_token, qrImage: result.qr_image };
+    return { 
+      qrData: result.qr_data, 
+      orderId: result.in_store_order_id,
+      amount: dto.amount || payment.totalAmount,
+    };
+  }
+
+  private async ensurePosExists(companyId: string, mpUserId: string, externalPosId: string, accessToken: string) {
+    const storePayload = {
+      name: 'Sucursal Principal',
+      external_id: `store_${companyId.slice(-8)}`,
+    };
+    const storeRes = await fetch(`https://api.mercadopago.com/users/${mpUserId}/stores`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(storePayload),
+    });
+    const store = storeRes.ok ? await storeRes.json() : null;
+    
+    const posPayload = {
+      name: 'Caja Principal',
+      external_id: externalPosId,
+      category: 621102,
+      store_id: store?.id,
+      fixed_amount: false,
+    };
+    await fetch(`https://api.mercadopago.com/pos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(posPayload),
+    });
+    this.logger.log(`POS creado para empresa ${companyId}`);
   }
 
   async handleWebhook(topic: string, id: string) {
@@ -203,5 +277,91 @@ export class MercadopagoService {
 
     if (!response.ok) throw new NotFoundException('Pago no encontrado en MercadoPago');
     return response.json();
+  }
+
+  async handleOAuthCallback(companyId: string, code: string) {
+    const response = await fetch('https://api.mercadopago.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_secret: this.config.get('MP_CLIENT_SECRET'),
+        client_id: this.config.get('MP_APP_ID'),
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: `${this.config.get('BACKEND_URL')}/api/v1/mercadopago/oauth/callback`,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      this.logger.error(`OAuth callback error: ${err}`);
+      throw new BadRequestException('Error al vincular cuenta de MercadoPago');
+    }
+    const data = await response.json();
+    
+    const userRes = await fetch(`https://api.mercadopago.com/users/${data.user_id}`, {
+      headers: { Authorization: `Bearer ${data.access_token}` }
+    });
+    const mpUser = userRes.ok ? await userRes.json() : null;
+
+    await this.prisma.companyConfig.update({
+      where: { companyId },
+      data: {
+        mpAccessToken: data.access_token,
+        mpRefreshToken: data.refresh_token,
+        mpPublicKey: data.public_key,
+        mpUserId: String(data.user_id),
+        mpNickname: mpUser?.nickname || null,
+      },
+    });
+    this.logger.log(`MP OAuth vinculado para empresa ${companyId}, user_id: ${data.user_id}`);
+    return { success: true };
+  }
+
+  async refreshOAuthToken(companyId: string) {
+    const config = await this.prisma.companyConfig.findUnique({ where: { companyId } });
+    if (!config?.mpRefreshToken) throw new BadRequestException('No hay refresh token guardado');
+    const response = await fetch('https://api.mercadopago.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_secret: this.config.get('MP_CLIENT_SECRET'),
+        client_id: this.config.get('MP_APP_ID'),
+        grant_type: 'refresh_token',
+        refresh_token: config.mpRefreshToken,
+      }),
+    });
+    if (!response.ok) throw new BadRequestException('Error renovando token de MercadoPago');
+    const data = await response.json();
+    await this.prisma.companyConfig.update({
+      where: { companyId },
+      data: {
+        mpAccessToken: data.access_token,
+        mpRefreshToken: data.refresh_token,
+      },
+    });
+    return data.access_token;
+  }
+
+  async disconnectOAuth(companyId: string) {
+    await this.prisma.companyConfig.update({
+      where: { companyId },
+      data: {
+        mpAccessToken: null,
+        mpRefreshToken: null,
+        mpPublicKey: null,
+        mpUserId: null,
+        mpNickname: null,
+      },
+    });
+    return { success: true };
+  }
+
+  async getOAuthStatus(companyId: string) {
+    const config = await this.prisma.companyConfig.findUnique({ where: { companyId } });
+    return {
+      connected: !!(config?.mpAccessToken),
+      nickname: config?.mpNickname || null,
+      userId: config?.mpUserId || null,
+    };
   }
 }

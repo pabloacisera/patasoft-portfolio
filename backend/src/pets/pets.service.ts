@@ -175,9 +175,9 @@ export class PetsService {
   async getMedicalRecords(id: string, companyId: string) {
     await this.findOne(id, companyId);
     return this.prisma.medicalRecord.findMany({
-      where: { petId: id },
+      where: { petId: id } as any,
       orderBy: { date: 'desc' },
       include: { procedures: true, prescriptions: true },
-    });
+    }).then((records: any) => records.filter(r => !r.isDeleted));
   }
 }

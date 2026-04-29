@@ -22,6 +22,7 @@ router.register('/dashboard/medical-records', { render: () => import('./pages/da
 router.register('/dashboard/payments', { render: () => import('./pages/dashboard.js').then(m => m.renderPayments()) });
 router.register('/dashboard/supplies', { render: () => import('./pages/dashboard.js').then(m => m.renderSupplies()) });
 router.register('/dashboard/ai-chat', { render: () => import('./pages/dashboard.js').then(m => m.renderAIChat()) });
+router.register('/dashboard/cash-register', { render: () => import('./pages/dashboard.js').then(m => m.renderCashRegister()) });
 router.register('/dashboard/connections', { render: () => import('./pages/dashboard.js').then(m => m.renderConnections()) });
 router.register('/dashboard/documents', { render: () => import('./pages/dashboard.js').then(m => m.renderDocuments()) });
 router.register('/settings', { render: () => import('./pages/dashboard.js').then(m => m.renderSettings()) });
@@ -32,6 +33,7 @@ router.register('/settings/prices', { render: () => import('./pages/dashboard.js
 router.register('/settings/ai', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsAI()) });
 router.register('/settings/connections', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsConnections()) });
 router.register('/admin', { render: () => import('./pages/admin.js').then(m => m.renderAdmin()) });
+router.register('/superadmin/subscriptions', { render: () => import('./pages/dashboard.js').then(m => m.renderSuperAdminSubscriptions()) });
 
 function checkAuth(pathname) {
   if (PUBLIC_ROUTES.includes(pathname)) {
@@ -63,6 +65,14 @@ function getDefaultRoute(pathname) {
 
 async function initApp() {
   const pathname = location.pathname;
+
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token');
+  const refresh = params.get('refresh');
+  if (token && refresh) {
+    api.setToken(token, refresh);
+    window.history.replaceState({}, '', pathname);
+  }
 
   loadFromStorage();
 

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger, BadRequestException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { EventsGateway } from '../events/events.gateway';
+import { CashRegisterService } from '../cash-register/cash-register.service';
 import * as ExcelJS from 'exceljs';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class DebtsService {
     private prisma: PrismaService,
     private cloudinary: CloudinaryService,
     private events: EventsGateway,
+    private cashService: CashRegisterService,
   ) {}
 
   async findAll(companyId: string, q: any = {}) {
@@ -38,9 +40,51 @@ export class DebtsService {
     return this.prisma.debt.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
   }
 
-  async markPaid(id: string, companyId: string) {
-    await this.findOne(id, companyId);
-    return this.prisma.debt.update({ where: { id }, data: { status: 'PAID', paidAt: new Date() } });
+  async markPaid(id: string, companyId: string, dto?: { method?: string }) {
+    const debt = await this.findOne(id, companyId);
+    const { amount: finalAmount, breakdown } = this.calculateDebtAmount(debt);
+    
+    await this.prisma.debt.update({
+      where: { id },
+      data: { 
+        status: 'PAID', 
+        paidAt: new Date(),
+        amount: finalAmount,
+      }
+    });
+
+    if (debt.paymentId) {
+      await this.prisma.payment.update({
+        where: { id: debt.paymentId },
+        data: { status: 'PAID', paidAmount: finalAmount, paidAt: new Date() }
+      });
+    }
+
+    this.logger.log(`Deuda ${id} pagada: ${breakdown}`);
+    return { success: true, amount: finalAmount, breakdown };
+  }
+
+  calculateDebtAmount(debt: any): { amount: number; breakdown: string } {
+    if (!debt.interestRate || !debt.originalAmount) {
+      return { amount: debt.amount, breakdown: 'Sin interés' };
+    }
+    
+    const createdAt = new Date(debt.createdAt);
+    const today = new Date();
+    const daysElapsed = Math.floor((today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    
+    const monthlyRate = debt.interestRate / 100;
+    const dailyRate = monthlyRate / 30;
+    const totalInterest = debt.originalAmount * dailyRate * daysElapsed;
+    const totalAmount = debt.originalAmount + totalInterest;
+    
+    const breakdown = `Capital: ${debt.originalAmount.toFixed(2)} + Interés ${debt.interestRate}%/mes por ${daysElapsed} días: ${totalInterest.toFixed(2)}`;
+    return { amount: Math.round(totalAmount * 100) / 100, breakdown };
+  }
+
+  async getPreviewAmount(id: string, companyId: string) {
+    const debt = await this.findOne(id, companyId);
+    return this.calculateDebtAmount(debt);
   }
 
   async getOverdue(companyId: string) {
@@ -131,6 +175,7 @@ export class DebtsService {
     await this.prisma.debt.updateMany({
       where: {
         status: 'PENDING',
+        isDeleted: false,
         dueDate: { lt: now },
       },
       data: { status: 'OVERDUE' },
@@ -139,6 +184,7 @@ export class DebtsService {
     const debtsToNotify = await this.prisma.debt.findMany({
       where: {
         status: { in: ['PENDING', 'OVERDUE'] },
+        isDeleted: false,
         OR: [
           { dueDate: { lte: alert2Days, gte: now }, alertSent2Day: false },
           { dueDate: { lte: alert1Day, gte: now }, alertSent1Day: false },

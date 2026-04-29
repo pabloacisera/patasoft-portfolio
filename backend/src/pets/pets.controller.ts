@@ -1,17 +1,22 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PetsService } from './pets.service';
+import { PdfService } from '../documents/pdf.service';
 import { CreatePetDto, UpdatePetDto } from './dto/pet.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Response } from 'express';
 
 @ApiTags('pets')
 @ApiBearerAuth()
 @Controller('api/v1/pets')
 @UseGuards(JwtAuthGuard)
 export class PetsController {
-  constructor(private petsService: PetsService) {}
+  constructor(
+    private petsService: PetsService,
+    private pdfService: PdfService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() user: any, @Query() query: any) {
@@ -59,5 +64,15 @@ export class PetsController {
   @Get(':id/medical-records')
   getMedicalRecords(@Param('id') id: string, @CurrentUser() user: any) {
     return this.petsService.getMedicalRecords(id, user.companyId);
+  }
+
+  @Get(':id/medical-history/pdf')
+  async getMedicalHistoryPdf(@Param('id') id: string, @CurrentUser() user: any, @Res() res: Response) {
+    const pdfBuffer = await this.pdfService.generateMedicalHistory(id, user.companyId);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="historial-${id}.pdf"`,
+    });
+    res.send(pdfBuffer);
   }
 }

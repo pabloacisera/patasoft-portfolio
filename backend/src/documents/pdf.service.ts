@@ -147,4 +147,111 @@ export class PdfService {
     }
     return `${years} año${years > 1 ? 's' : ''}`;
   }
+
+   async generateMedicalHistory(petId: string, companyId: string): Promise<Buffer> {
+    const pet = await this.prisma.pet.findFirst({
+      where: { id: petId, companyId } as any,
+      include: {
+        client: true,
+        photos: true,
+        medicalRecords: {
+          orderBy: { date: 'desc' },
+          include: {
+            procedures: true,
+            prescriptions: { include: { supply: true } },
+          },
+        },
+        payments: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    }) as any;
+
+    if (!pet) throw new NotFoundException('Mascota no encontrada');
+    if (pet.isDeleted) throw new NotFoundException('Mascota eliminada');
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true, address: true, phone: true },
+    });
+
+    const templatePath = path.join(__dirname, 'templates', 'medical-history.hbs');
+    
+    if (!fs.existsSync(templatePath)) {
+      await this.createMedicalHistoryTemplate();
+    }
+
+    const template = fs.readFileSync(templatePath, 'utf-8');
+    const compiled = Handlebars.compile(template);
+
+    const html = compiled({
+      petName: pet.name,
+      species: pet.species,
+      breed: pet.breed || '-',
+      gender: pet.gender || '-',
+      age: pet.birthDate ? this.calculateAge(pet.birthDate) : 'Desconocida',
+      weight: pet.weight || '-',
+      color: pet.color || '-',
+      microchip: pet.microchipId || '-',
+      isNeutered: pet.isNeutered,
+      notes: pet.notes,
+      clientName: pet.client?.name || '-',
+      clientLastName: pet.client?.lastName || '',
+      clientPhone: pet.client?.phone || '-',
+      clientEmail: pet.client?.email || '-',
+      companyName: company?.name,
+      companyAddress: company?.address,
+      companyPhone: company?.phone,
+      records: pet.medicalRecords.map(r => ({
+        date: r.date.toLocaleDateString('es-AR'),
+        visitReason: r.visitReason,
+        diagnosis: r.diagnosis || '-',
+        treatment: r.treatment || '-',
+        procedures: r.procedures.map(p => ({
+          name: p.name,
+          price: p.customPrice || '-',
+        })),
+        prescriptions: r.prescriptions.map(p => ({
+          medicineName: p.medicineName,
+          dose: p.dose || '-',
+          duration: p.duration || '-',
+        })),
+      })),
+       payments: (pet.payments || []).filter((p: any) => !p.isDeleted).map(p => ({
+        date: p.createdAt.toLocaleDateString('es-AR'),
+        amountValue: p.totalAmount.toFixed(2),
+        status: p.status,
+        method: p.method || '-',
+      })),
+       debts: (pet.payments || []).filter((p: any) => p.debt && !p.debt.isDeleted).map(p => ({
+        amountValue: p.debt.amount.toFixed(2),
+        status: p.debt.status,
+        dueDate: p.debt.dueDate.toLocaleDateString('es-AR'),
+      })),
+      generatedAt: new Date().toLocaleString('es-AR'),
+    });
+
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
+    });
+
+    await browser.close();
+    return Buffer.from(pdf);
+  }
+
+  private async createMedicalHistoryTemplate() {
+    // Template is now in external file: src/documents/templates/medical-history.hbs
+    // This method is kept for compatibility but no longer creates the template
+    return;
+  }
 }

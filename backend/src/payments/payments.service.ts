@@ -4,6 +4,7 @@ import { CreatePaymentDto, UpdatePaymentDto } from './dto/payment.dto';
 import { PaymentStatus, PaymentMethod } from '@prisma/client';
 import { MercadopagoService } from '../mercadopago/mercadopago.service';
 import { PdfService } from '../documents/pdf.service';
+import { CashRegisterService } from '../cash-register/cash-register.service';
 
 @Injectable()
 export class PaymentsService {
@@ -13,6 +14,7 @@ export class PaymentsService {
     private prisma: PrismaService,
     private mpService: MercadopagoService,
     private pdfService: PdfService,
+    private cashService: CashRegisterService,
   ) {}
 
   async findAll(companyId: string, q: any = {}) {
@@ -79,25 +81,72 @@ export class PaymentsService {
       include: { items: true },
     });
     this.logger.log(`Pago creado: ${payment.id}`);
+
+    if (dto.method === 'CASH' && payment.status !== 'CANCELLED') {
+      await this.cashService.createFromPayment(companyId, payment.id, payment.totalAmount);
+    }
+
+    if (dto.clientId && dto.dueDate) {
+      const isDeferred = payment.status === 'DEFERRED';
+      const isUnconfirmedMethod = ['MP_QR', 'MP_CHECKOUT', 'TRANSFER', 'CHECK'].includes(dto.method);
+      
+      if (isDeferred || isUnconfirmedMethod) {
+        await this.prisma.debt.create({
+          data: {
+            companyId,
+            clientId: dto.clientId,
+            paymentId: payment.id,
+            amount: payment.totalAmount,
+            dueDate: new Date(dto.dueDate),
+            notes: dto.notes,
+            interestRate: dto.interestRate || null,
+            originalAmount: payment.totalAmount,
+          }
+        });
+        this.logger.log(`Deuda creada automáticamente para pago: ${payment.id}`);
+      }
+    }
+
     return payment;
   }
 
   async update(id: string, companyId: string, dto: UpdatePaymentDto) {
-    await this.findOne(id, companyId);
-    return this.prisma.payment.update({ 
+    const payment = await this.findOne(id, companyId);
+    const updated = await this.prisma.payment.update({ 
       where: { id }, 
       data: { 
         status: dto.status as PaymentStatus, 
         paidAmount: dto.paidAmount, 
         paidAt: dto.paidAt ? new Date(dto.paidAt) : undefined 
       }, 
-      include: { items: true } 
+      include: { items: true, debt: true } 
     });
+
+    // Si se marca como PAID, crear movimiento de caja y saldar deuda
+    if (dto.status === 'PAID') {
+      const existingMovement = await this.prisma.cashMovement.findFirst({
+        where: { paymentId: id }
+      });
+      if (!existingMovement) {
+        await this.cashService.createFromPayment(companyId, id, updated.paidAmount || updated.totalAmount);
+      }
+      if (updated.debt) {
+        await this.prisma.debt.update({
+          where: { id: updated.debt.id },
+          data: { status: 'PAID', paidAt: new Date() }
+        });
+      }
+    }
+    return updated;
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.payment.delete({ where: { id } });
+    await this.prisma.payment.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() } as any,
+    });
+    this.logger.log(`Pago eliminado (soft): ${id}`);
   }
 
   async generateCheckoutLink(id: string, companyId: string) {

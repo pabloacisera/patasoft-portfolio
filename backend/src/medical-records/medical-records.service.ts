@@ -72,9 +72,72 @@ export class MedicalRecordsService {
         nextVisitDate: dto.nextVisitDate ? new Date(dto.nextVisitDate) : undefined,
         veterinarianId: dto.veterinarianId,
         date: dto.date ? new Date(dto.date) : undefined,
+        procedures: dto.procedures?.length ? {
+          create: dto.procedures.map(p => ({
+            name: p.name,
+            description: p.description,
+            priceItemId: p.priceItemId || null,
+            supplyId: p.supplyId || null,
+            customPrice: p.customPrice,
+            quantity: p.quantity || 1,
+          }))
+        } : undefined,
+        prescriptions: dto.prescriptions?.length ? {
+          create: dto.prescriptions.map(p => ({
+            supplyId: p.supplyId || null,
+            medicineName: p.medicineName,
+            dose: p.dose,
+            frequency: p.frequency,
+            duration: p.duration,
+            soldInClinic: !!p.soldInClinic,
+            quantity: p.quantity || 1,
+            dispensingQuantity: p.dispensingQuantity || null,
+            dispensingUnit: p.dispensingUnit || null,
+            doseQuantity: p.doseQuantity || null,
+            doseUnit: p.doseUnit || null,
+          }))
+        } : undefined,
       },
-      include: { pet: true, procedures: true, prescriptions: true },
+      include: { pet: true, procedures: true, prescriptions: { include: { supply: true } } },
     });
+
+    if (dto.prescriptions?.length) {
+      for (const presc of dto.prescriptions) {
+        if (presc.supplyId && presc.soldInClinic) {
+          const supply = await this.prisma.supply.findFirst({ 
+            where: { id: presc.supplyId, companyId } 
+          });
+          if (supply) {
+            // Calcular cuánto descontar del stock
+            let stockDiscount = presc.quantity || 1;
+            
+            if (presc.dispensingQuantity && supply.unitsPerStock && supply.unitsPerStock > 1) {
+              // Tiene sistema de unidades configurado: calcular proporcionalmente
+              stockDiscount = Math.ceil(presc.dispensingQuantity / supply.unitsPerStock);
+            }
+            
+            const newQty = Math.max(0, supply.quantity - stockDiscount);
+            await this.prisma.supply.update({ 
+              where: { id: presc.supplyId }, 
+              data: { quantity: newQty } 
+            });
+          }
+        }
+      }
+    }
+
+    if (dto.procedures?.length) {
+      for (const proc of dto.procedures) {
+        if (proc.supplyId) {
+          const supply = await this.prisma.supply.findFirst({ where: { id: proc.supplyId, companyId } });
+          if (supply) {
+            const newQty = Math.max(0, supply.quantity - (proc.quantity || 1));
+            await this.prisma.supply.update({ where: { id: proc.supplyId }, data: { quantity: newQty } });
+            this.logger.log(`Stock descontado por procedure: ${supply.name} -${proc.quantity || 1} (quedan ${newQty})`);
+          }
+        }
+      }
+    }
 
     this.logger.log(`Historial creado: ${record.id} para mascota ${pet.name}`);
     return record;
@@ -101,22 +164,38 @@ export class MedicalRecordsService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.medicalRecord.delete({ where: { id } });
-    this.logger.log(`Historial eliminado: ${id}`);
+    await this.prisma.medicalRecord.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() } as any,
+    });
+    this.logger.log(`Historial eliminado (soft): ${id}`);
   }
 
   async addProcedure(recordId: string, companyId: string, dto: any) {
     await this.findOne(recordId, companyId);
-    return this.prisma.procedure.create({
+    
+    const procedure = await this.prisma.procedure.create({
       data: {
         medicalRecordId: recordId,
         name: dto.name,
         description: dto.description,
         priceItemId: dto.priceItemId,
+        supplyId: dto.supplyId || null,
         customPrice: dto.customPrice,
         quantity: dto.quantity || 1,
       },
     });
+
+    if (dto.supplyId) {
+      const supply = await this.prisma.supply.findFirst({ where: { id: dto.supplyId, companyId } });
+      if (supply) {
+        const newQty = Math.max(0, supply.quantity - (dto.quantity || 1));
+        await this.prisma.supply.update({ where: { id: dto.supplyId }, data: { quantity: newQty } });
+        this.logger.log(`Stock descontado por procedure agregado: ${supply.name} -${dto.quantity || 1} (quedan ${newQty})`);
+      }
+    }
+
+    return procedure;
   }
 
   async addPrescription(recordId: string, companyId: string, dto: any) {

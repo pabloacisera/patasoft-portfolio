@@ -66,6 +66,10 @@ export class SuppliesService {
         brand: dto.brand, 
         category: dto.category, 
         unit: dto.unit, 
+        stockUnit: dto.stockUnit || null,
+        unitsPerStock: dto.unitsPerStock ? Number(dto.unitsPerStock) : null,
+        dispensingUnit: dto.dispensingUnit || null,
+        salePrice: dto.salePrice ? Number(dto.salePrice) : null,
         quantity: dto.quantity || 0, 
         minQuantity: dto.minQuantity, 
         initialQty: dto.quantity, 
@@ -91,13 +95,27 @@ export class SuppliesService {
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.supply.delete({ where: { id } });
+    await this.prisma.supply.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+    this.logger.log(`Insumo eliminado (soft): ${id}`);
   }
 
-  async decreaseStock(id: string, companyId: string, qty: number) {
+  async decreaseStock(id: string, companyId: string, qty: number, dispensingQty?: number) {
     const supply = await this.findOne(id, companyId);
-    const newQty = Math.max(0, supply.quantity - qty);
-    
+
+    let stockToDiscount = qty;
+
+    // Si vienen unidades de despacho Y el supply tiene configuración de unidades
+    if (dispensingQty && supply.unitsPerStock && supply.unitsPerStock > 1) {
+      // Calcular cuántas unidades de stock se consumen
+      // Redondear hacia arriba: no podés usar menos de 1 unidad de stock
+      stockToDiscount = Math.ceil(dispensingQty / supply.unitsPerStock);
+    }
+
+    const newQty = Math.max(0, supply.quantity - stockToDiscount);
+
     const updated = await this.prisma.supply.update({
       where: { id },
       data: { quantity: newQty }

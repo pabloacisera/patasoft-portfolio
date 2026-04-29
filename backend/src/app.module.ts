@@ -25,6 +25,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { EventsModule } from './events/events.module';
 import { MailModule } from './mail/mail.module';
 import { ConnectionsModule } from './connections/connections.module';
+import { CashRegisterModule } from './cash-register/cash-register.module';
+import { SuperAdminModule } from './superadmin/superadmin.module';
+import { SupplyPurchasesModule } from './supply-purchases/supply-purchases.module';
 
 @Module({
   imports: [
@@ -57,6 +60,9 @@ import { ConnectionsModule } from './connections/connections.module';
     EventsModule,
     MailModule,
     ConnectionsModule,
+    CashRegisterModule,
+    SuperAdminModule,
+    SupplyPurchasesModule,
   ],
 })
 export class AppModule {}

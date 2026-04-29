@@ -110,23 +110,23 @@ export class ClientsService {
 
   async getPets(id: string, companyId: string) {
     return this.prisma.pet.findMany({
-      where: { clientId: id, companyId },
+      where: { clientId: id, companyId } as any,
       include: { photos: true },
-    });
+    }).then(pets => pets.filter((p: any) => !p.isDeleted));
   }
 
   async getPayments(id: string, companyId: string) {
     return this.prisma.payment.findMany({
-      where: { clientId: id, companyId },
+      where: { clientId: id, companyId } as any,
       orderBy: { createdAt: 'desc' },
       include: { items: true, pet: true },
-    });
+    }).then(payments => payments.filter((p: any) => !p.isDeleted));
   }
 
   async getDebts(id: string, companyId: string) {
     return this.prisma.debt.findMany({
-      where: { clientId: id, companyId },
+      where: { clientId: id, companyId } as any,
       orderBy: { createdAt: 'desc' },
-    });
+    }).then(debts => debts.filter((d: any) => !d.isDeleted));
   }
 }

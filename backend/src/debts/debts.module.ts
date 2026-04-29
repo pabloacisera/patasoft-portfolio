@@ -5,6 +5,7 @@ import { DebtsService } from './debts.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { EventsModule } from '../events/events.module';
+import { CashRegisterModule } from '../cash-register/cash-register.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { EventsModule } from '../events/events.module';
     PrismaModule,
     CloudinaryModule,
     EventsModule,
+    CashRegisterModule,
   ],
   controllers: [DebtsController],
   providers: [DebtsService],

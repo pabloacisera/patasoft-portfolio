@@ -240,14 +240,29 @@ export class AiProxyService {
   }
 
   async getRagStatus(companyId: string) {
+    // Verificar que la empresa exista en nuestra base
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true, name: true },
+    });
+
+    if (!company) {
+      this.logger.warn(`RAG status: Empresa no encontrada ${companyId}`);
+      return { synced: false, documentsCount: 0, message: 'Empresa no encontrada' };
+    }
+
     try {
       const response = await fetch(`${this.aiBaseUrl}/api/v1/rag/status/${companyId}`);
       if (!response.ok) {
-        return { synced: false, error: 'No se pudo obtener estado del RAG' };
+        // Si el servicio de IA responde 404 o error, devolver estado por defecto
+        this.logger.warn(`RAG service returned ${response.status} for company ${companyId}`);
+        return { synced: false, documentsCount: 0, company: company.name };
       }
-      return await response.json();
+      const result = await response.json();
+      return result;
     } catch (error) {
-      return { synced: false, error: error.message };
+      this.logger.error(`RAG status error: ${error.message}`);
+      return { synced: false, documentsCount: 0, error: error.message };
     }
   }
 

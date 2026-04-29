@@ -1,11 +1,14 @@
 import { Injectable, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(private reflector: Reflector, private jwtService: JwtService) {
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {
     super();
   }
 
@@ -59,6 +62,28 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw new ForbiddenException(
         'ONBOARDING_REQUIRED:Tu cuenta no tiene una empresa asociada. Completa el onboarding primero.'
       );
+    }
+
+    // Check de suscripción expirada en cada request
+    try {
+      const subscription = await this.prisma.subscription.findUnique({
+        where: { companyId: user.companyId },
+      });
+
+      if (subscription) {
+        const now = new Date();
+        const isTrialExpired = subscription.status === 'TRIAL' && subscription.trialEndsAt && new Date(subscription.trialEndsAt) < now;
+        const isSubExpired = subscription.status === 'ACTIVE' && subscription.expiresAt && new Date(subscription.expiresAt) < now;
+        
+        if (isTrialExpired || isSubExpired || subscription.status === 'BLOCKED') {
+          throw new ForbiddenException('SUBSCRIPTION_EXPIRED:Tu suscripción ha expirado. Por favor renová en Configuración / Suscripción.');
+        }
+      }
+    } catch (e) {
+      if (e instanceof ForbiddenException && e.message.includes('SUBSCRIPTION_EXPIRED')) {
+        throw e;
+      }
+      // No bloquear requests si falla el check de suscripción
     }
 
     return true;
