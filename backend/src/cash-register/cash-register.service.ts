@@ -10,7 +10,7 @@ export class CashRegisterService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(companyId: string, q: CashSummaryQueryDto = {}) {
-    const { date, startDate, endDate } = q;
+    const { date, startDate, endDate, page = 1, limit = 20, search, type } = q;
     const where: any = { companyId };
 
     if (date) {
@@ -25,13 +25,38 @@ export class CashRegisterService {
       };
     }
 
-    const movements = await this.prisma.cashMovement.findMany({
-      where,
-      orderBy: { date: 'desc' },
-      include: { payment: true },
-    });
+    if (type) {
+      where.type = type;
+    }
 
-    return movements;
+    if (search) {
+      where.reason = { contains: search, mode: 'insensitive' };
+    }
+
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [movements, total] = await Promise.all([
+      this.prisma.cashMovement.findMany({
+        where,
+        orderBy: { date: 'desc' },
+        include: { payment: true },
+        skip,
+        take: limitNum,
+      }),
+      this.prisma.cashMovement.count({ where }),
+    ]);
+
+    return {
+      data: movements,
+      meta: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    };
   }
 
   async getSummary(companyId: string, q: CashSummaryQueryDto = {}) {

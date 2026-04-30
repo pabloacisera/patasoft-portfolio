@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; color: #222; margin: 0; padding: 0; font-size: 13px; }
+    .header { display: flex; justify-content: space-between; padding: 24px 40px 16px; border-bottom: 2px solid #2ecc71; }
+    .company h2 { margin: 0; color: #2ecc71; font-size: 18px; }
+    .company p { margin: 2px 0; font-size: 12px; color: #555; }
+    .doc-title { text-align: right; }
+    .doc-title h3 { margin: 0; font-size: 15px; }
+    .section { padding: 16px 40px; }
+    .section h4 { margin: 0 0 8px; font-size: 13px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+    .patient-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .field label { font-size: 11px; color: #888; display: block; }
+    .field span { font-size: 13px; font-weight: 500; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f5f5f5; padding: 8px 12px; text-align: left; font-size: 12px; }
+    td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-sold { background: #dcfce7; color: #166534; }
+    .badge-buy { background: #fef9c3; color: #854d0e; }
+    .footer { padding: 16px 40px; border-top: 1px solid #eee; margin-top: 16px; }
+    .signature-box { border-top: 1px solid #333; width: 200px; margin-top: 40px; padding-top: 4px; font-size: 12px; color: #555; }
+    .legal { font-size: 11px; color: #888; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="company">
+      {{#if company.logoUrl}}<img src="{{company.logoUrl}}" height="40" style="margin-bottom:4px;"><br>{{/if}}
+      <h2>{{company.name}}</h2>
+      <p>{{company.address}}{{#if company.phone}} | Tel: {{company.phone}}{{/if}}</p>
+      <p>CUIT: {{company.cuit}}</p>
+    </div>
+    <div class="doc-title">
+      <h3>RECETA VETERINARIA</h3>
+      <p>Fecha: {{date}}</p>
+      <p>Nº: {{recordId}}</p>
+      {{#if veterinarian}}<p>Dr/a: {{veterinarian}}</p>{{/if}}
+    </div>
+  </div>
+
+  <div class="section">
+    <h4>Datos del paciente</h4>
+    <div class="patient-grid">
+      <div class="field"><label>Paciente</label><span>{{pet.name}} ({{pet.species}}{{#if pet.breed}}, {{pet.breed}}{{/if}})</span></div>
+      <div class="field"><label>Propietario</label><span>{{pet.client.name}}{{#if pet.client.lastName}} {{pet.client.lastName}}{{/if}}</span></div>
+      {{#if pet.client.phone}}<div class="field"><label>Teléfono</label><span>{{pet.client.phone}}</span></div>{{/if}}
+    </div>
+    {{#if diagnosis}}
+    <div class="field"><label>Diagnóstico</label><span>{{diagnosis}}</span></div>
+    {{/if}}
+  </div>
+
+  <div class="section">
+    <h4>Prescripciones</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Medicamento</th><th>Dosis</th><th>Frecuencia</th><th>Duración</th><th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each prescriptions}}
+        <tr>
+          <td><strong>{{medicineName}}</strong>{{#if doseQuantity}}<br><small>{{doseQuantity}} {{doseUnit}}</small>{{/if}}</td>
+          <td>{{dose}}</td>
+          <td>{{frequency}}</td>
+          <td>{{duration}}</td>
+          <td>
+            {{#if soldInClinic}}
+            <span class="badge badge-sold">Entregado en clínica ({{dispensingQuantity}} {{dispensingUnit}})</span>
+            {{else}}
+            <span class="badge badge-buy">El propietario debe adquirir</span>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <div class="signature-box">Firma y sello del profesional</div>
+    <p class="legal">Válido por 30 días desde la fecha de emisión. {{company.name}} — Uso exclusivo veterinario.</p>
+  </div>
+</body>
+</html>

@@ -1,25 +1,44 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PdfService } from '../documents/pdf.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
 
 @Injectable()
 export class MedicalRecordsService {
   private readonly logger = new Logger(MedicalRecordsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pdfService: PdfService,
+  ) {}
 
-  async findAll(companyId: string, pagination: { page?: number; limit?: number; petId?: string } = {}) {
+  async findAll(companyId: string, pagination: any = {}) {
     const page = Number(pagination.page) || 1;
     const limit = Number(pagination.limit) || 20;
-    const petId = pagination.petId;
+    const { petId, search, startDate, endDate } = pagination;
     const skip = (page - 1) * limit;
 
-    const pets = await this.prisma.pet.findMany({ where: { companyId }, select: { id: true } });
+    const pets = await this.prisma.pet.findMany({ where: { companyId, isDeleted: false }, select: { id: true } });
     const petIds = pets.map(p => p.id);
 
-    const where = {
+    const where: any = {
       petId: { in: petIds },
+      isDeleted: false,
       ...(petId && { petId }),
+      ...(startDate || endDate ? {
+        date: {
+          ...(startDate && { gte: new Date(startDate) }),
+          ...(endDate && { lte: new Date(endDate + 'T23:59:59') }),
+        }
+      } : {}),
+      ...(search && {
+        OR: [
+          { visitReason: { contains: search, mode: 'insensitive' } },
+          { diagnosis: { contains: search, mode: 'insensitive' } },
+          { treatment: { contains: search, mode: 'insensitive' } },
+          { observations: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
     };
 
     const [data, total] = await this.prisma.$transaction([
@@ -28,7 +47,16 @@ export class MedicalRecordsService {
         skip,
         take: limit,
         orderBy: { date: 'desc' },
-        include: { pet: { select: { id: true, name: true, species: true } }, procedures: true, prescriptions: true },
+        include: {
+          pet: {
+            select: {
+              id: true, name: true, species: true,
+              client: { select: { id: true, name: true, lastName: true } },
+            }
+          },
+          procedures: true,
+          prescriptions: true,
+        },
       }),
       this.prisma.medicalRecord.count({ where }),
     ]);
@@ -57,90 +85,164 @@ export class MedicalRecordsService {
   async create(companyId: string, dto: CreateMedicalRecordDto) {
     const pet = await this.prisma.pet.findFirst({
       where: { id: dto.petId, companyId },
+      include: { client: true },
     });
     if (!pet) throw new NotFoundException('Mascota no encontrada');
 
-    const record = await this.prisma.medicalRecord.create({
-      data: {
-        petId: dto.petId,
-        visitReason: dto.visitReason,
-        diagnosis: dto.diagnosis,
-        treatment: dto.treatment,
-        observations: dto.observations,
-        weight: dto.weight,
-        temperature: dto.temperature,
-        nextVisitDate: dto.nextVisitDate ? new Date(dto.nextVisitDate) : undefined,
-        veterinarianId: dto.veterinarianId,
-        date: dto.date ? new Date(dto.date) : undefined,
-        procedures: dto.procedures?.length ? {
-          create: dto.procedures.map(p => ({
-            name: p.name,
-            description: p.description,
-            priceItemId: p.priceItemId || null,
-            supplyId: p.supplyId || null,
-            customPrice: p.customPrice,
-            quantity: p.quantity || 1,
-          }))
-        } : undefined,
-        prescriptions: dto.prescriptions?.length ? {
-          create: dto.prescriptions.map(p => ({
-            supplyId: p.supplyId || null,
-            medicineName: p.medicineName,
-            dose: p.dose,
-            frequency: p.frequency,
-            duration: p.duration,
-            soldInClinic: !!p.soldInClinic,
-            quantity: p.quantity || 1,
-            dispensingQuantity: p.dispensingQuantity || null,
-            dispensingUnit: p.dispensingUnit || null,
-            doseQuantity: p.doseQuantity || null,
-            doseUnit: p.doseUnit || null,
-          }))
-        } : undefined,
-      },
-      include: { pet: true, procedures: true, prescriptions: { include: { supply: true } } },
+    // Calcular items del pago
+    const paymentItems = [];
+    let totalAmount = 0;
+
+    // Procedures → buscar precio en PriceItem o customPrice
+    for (const proc of (dto.procedures || [])) {
+      let unitPrice = proc.customPrice || 0;
+      if (proc.priceItemId && !proc.customPrice) {
+        const pi = await this.prisma.priceItem.findUnique({ where: { id: proc.priceItemId } });
+        unitPrice = pi?.price || 0;
+      }
+      if (proc.supplyId) {
+        const supply = await this.prisma.supply.findUnique({ where: { id: proc.supplyId } });
+        if (supply?.salePrice && supply?.unitsPerStock) {
+          unitPrice = supply.salePrice / supply.unitsPerStock;
+        }
+      }
+      const qty = proc.quantity || 1;
+      const total = unitPrice * qty;
+      totalAmount += total;
+      if (unitPrice > 0) {
+        paymentItems.push({
+          description: proc.name,
+          quantity: qty,
+          unitPrice,
+          totalPrice: total,
+          itemType: proc.supplyId ? 'SUPPLY' : 'PROCEDURE',
+        });
+      }
+    }
+
+    // Prescriptions vendidas en clínica
+    for (const pres of (dto.prescriptions || [])) {
+      if (!pres.soldInClinic || !pres.supplyId) continue;
+      const supply = await this.prisma.supply.findUnique({ where: { id: pres.supplyId } });
+      if (!supply) continue;
+      const unitIndividual = supply.unitsPerStock ? (supply.salePrice || 0) / supply.unitsPerStock : (supply.salePrice || 0);
+      const qty = pres.dispensingQuantity || pres.quantity || 1;
+      const total = unitIndividual * qty;
+      totalAmount += total;
+      paymentItems.push({
+        description: `${supply.name} (${qty} ${supply.dispensingUnit || 'u.'})`,
+        quantity: qty,
+        unitPrice: unitIndividual,
+        totalPrice: total,
+        itemType: 'SUPPLY',
+      });
+    }
+
+    // Transacción atómica
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Crear MedicalRecord
+      const record = await tx.medicalRecord.create({
+        data: {
+          petId: dto.petId,
+          visitReason: dto.visitReason,
+          diagnosis: dto.diagnosis,
+          treatment: dto.treatment,
+          observations: dto.observations,
+          weight: dto.weight,
+          temperature: dto.temperature,
+          nextVisitDate: dto.nextVisitDate ? new Date(dto.nextVisitDate) : undefined,
+          veterinarianId: dto.veterinarianId,
+          date: dto.date ? new Date(dto.date) : undefined,
+          procedures: dto.procedures?.length ? {
+            create: dto.procedures.map(p => ({
+              name: p.name,
+              description: p.description,
+              priceItemId: p.priceItemId || null,
+              supplyId: p.supplyId || null,
+              customPrice: p.customPrice,
+              quantity: p.quantity || 1,
+            }))
+          } : undefined,
+          prescriptions: dto.prescriptions?.length ? {
+            create: dto.prescriptions.map(p => ({
+              supplyId: p.supplyId || null,
+              medicineName: p.medicineName,
+              dose: p.dose,
+              frequency: p.frequency,
+              duration: p.duration,
+              soldInClinic: p.soldInClinic || false,
+              quantity: p.quantity || 1,
+              dispensingQuantity: p.dispensingQuantity,
+              dispensingUnit: p.dispensingUnit,
+              doseQuantity: p.doseQuantity,
+              doseUnit: p.doseUnit,
+            }))
+          } : undefined,
+        },
+        include: {
+          procedures: true,
+          prescriptions: true,
+        },
+      });
+
+      // 2. Descontar stock de supplies usados en procedures
+      for (const proc of (dto.procedures || [])) {
+        if (!proc.supplyId) continue;
+        const supply = await tx.supply.findUnique({ where: { id: proc.supplyId } });
+        if (!supply) continue;
+        const stockUnitsUsed = supply.unitsPerStock
+          ? Math.ceil((proc.quantity || 1) / supply.unitsPerStock)
+          : (proc.quantity || 1);
+        await tx.supply.update({
+          where: { id: proc.supplyId },
+          data: { quantity: { decrement: stockUnitsUsed } },
+        });
+      }
+
+      // 3. Descontar stock de prescriptions vendidas en clínica
+      for (const pres of (dto.prescriptions || [])) {
+        if (!pres.soldInClinic || !pres.supplyId) continue;
+        const supply = await tx.supply.findUnique({ where: { id: pres.supplyId } });
+        if (!supply) continue;
+        const qty = pres.dispensingQuantity || pres.quantity || 1;
+        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty / supply.unitsPerStock) : qty;
+        await tx.supply.update({
+          where: { id: pres.supplyId },
+          data: { quantity: { decrement: stockUnitsUsed } },
+        });
+      }
+
+      // 4. Crear Payment PENDING
+      const payment = await tx.payment.create({
+        data: {
+          companyId,
+          clientId: pet.clientId || null,
+          petId: pet.id,
+          medicalRecordId: record.id,
+          totalAmount,
+          status: 'PENDING',
+          items: { create: paymentItems },
+        },
+        include: { items: true },
+      });
+
+      return { record, payment };
     });
 
-    if (dto.prescriptions?.length) {
-      for (const presc of dto.prescriptions) {
-        if (presc.supplyId && presc.soldInClinic) {
-          const supply = await this.prisma.supply.findFirst({ 
-            where: { id: presc.supplyId, companyId } 
-          });
-          if (supply) {
-            // Calcular cuánto descontar del stock
-            let stockDiscount = presc.quantity || 1;
-            
-            if (presc.dispensingQuantity && supply.unitsPerStock && supply.unitsPerStock > 1) {
-              // Tiene sistema de unidades configurado: calcular proporcionalmente
-              stockDiscount = Math.ceil(presc.dispensingQuantity / supply.unitsPerStock);
-            }
-            
-            const newQty = Math.max(0, supply.quantity - stockDiscount);
-            await this.prisma.supply.update({ 
-              where: { id: presc.supplyId }, 
-              data: { quantity: newQty } 
-            });
-          }
-        }
-      }
-    }
+    // 5. Generar PDFs en background (no bloquear la respuesta)
+    this.generateAndStorePdfs(result.record.id, result.payment.id, companyId).catch(e =>
+      this.logger.error('Error generando PDFs post-consulta', e)
+    );
 
-    if (dto.procedures?.length) {
-      for (const proc of dto.procedures) {
-        if (proc.supplyId) {
-          const supply = await this.prisma.supply.findFirst({ where: { id: proc.supplyId, companyId } });
-          if (supply) {
-            const newQty = Math.max(0, supply.quantity - (proc.quantity || 1));
-            await this.prisma.supply.update({ where: { id: proc.supplyId }, data: { quantity: newQty } });
-            this.logger.log(`Stock descontado por procedure: ${supply.name} -${proc.quantity || 1} (quedan ${newQty})`);
-          }
-        }
-      }
-    }
+    this.logger.log(`Historial creado: ${result.record.id} para mascota ${pet.name}`);
+    return result;
+  }
 
-    this.logger.log(`Historial creado: ${record.id} para mascota ${pet.name}`);
-    return record;
+  private async generateAndStorePdfs(recordId: string, paymentId: string, companyId: string) {
+    await Promise.allSettled([
+      this.pdfService.generateAndStorePrescription(recordId, companyId),
+      this.pdfService.generateAndStoreReceipt(paymentId, companyId),
+    ]);
   }
 
   async update(id: string, companyId: string, dto: UpdateMedicalRecordDto) {
@@ -166,9 +268,9 @@ export class MedicalRecordsService {
     await this.findOne(id, companyId);
     await this.prisma.medicalRecord.update({
       where: { id },
-      data: { isDeleted: true, deletedAt: new Date() } as any,
+      data: { isDeleted: true, deletedAt: new Date() },
     });
-    this.logger.log(`Historial eliminado (soft): ${id}`);
+    this.logger.log(`Historial eliminado (soft delete): ${id}`);
   }
 
   async addProcedure(recordId: string, companyId: string, dto: any) {
@@ -210,7 +312,29 @@ export class MedicalRecordsService {
         duration: dto.duration,
         soldInClinic: dto.soldInClinic ?? false,
         quantity: dto.quantity || 1,
+        dispensingQuantity: dto.dispensingQuantity,
+        dispensingUnit: dto.dispensingUnit,
+        doseQuantity: dto.doseQuantity,
+        doseUnit: dto.doseUnit,
       },
     });
+  }
+
+  async findPrescriptionDocument(recordId: string, companyId: string) {
+    return this.prisma.document.findFirst({
+      where: {
+        companyId,
+        relatedEntityId: recordId,
+        relatedEntity: 'MedicalRecord',
+        type: 'EXPORT_PDF',
+        name: { contains: 'Receta' },
+        isDeleted: false,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async generateAndStorePrescription(recordId: string, companyId: string) {
+    return this.pdfService.generateAndStorePrescription(recordId, companyId);
   }
 }

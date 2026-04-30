@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MulterModule } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { PetsController } from './pets.controller';
 import { PetsService } from './pets.service';
 import { PdfModule } from '../documents/pdf.module';
@@ -12,7 +13,7 @@ import { PdfModule } from '../documents/pdf.module';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
-    MulterModule.register({ dest: './uploads' }),
+    MulterModule.register({ storage: memoryStorage() }),
   ],
   controllers: [PetsController],
   providers: [PetsService],

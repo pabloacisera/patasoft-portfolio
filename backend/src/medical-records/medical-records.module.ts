@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MedicalRecordsController } from './medical-records.controller';
 import { MedicalRecordsService } from './medical-records.service';
+import { PdfService } from '../documents/pdf.service';
 
 @Module({
   imports: [
@@ -11,7 +12,7 @@ import { MedicalRecordsService } from './medical-records.service';
     }),
   ],
   controllers: [MedicalRecordsController],
-  providers: [MedicalRecordsService],
+  providers: [MedicalRecordsService, PdfService],
   exports: [MedicalRecordsService],
 })
 export class MedicalRecordsModule {}

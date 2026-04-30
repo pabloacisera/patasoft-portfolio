@@ -4,6 +4,7 @@ import { MedicalRecordsService } from './medical-records.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { NotFoundException } from '@nestjs/common';
 
 @ApiTags('medical-records')
 @ApiBearerAuth()
@@ -45,5 +46,20 @@ export class MedicalRecordsController {
   @Post(':id/prescriptions')
   addPrescription(@Param('id') id: string, @Body() dto: any, @CurrentUser() user: any) {
     return this.medicalRecordsService.addPrescription(id, user.companyId, dto);
+  }
+
+  @Get(':id/prescription/url')
+  @UseGuards(JwtAuthGuard)
+  async getPrescriptionUrl(@Param('id') id: string, @CurrentUser() user: any) {
+    const record = await this.medicalRecordsService.findOne(id, user.companyId);
+    if (!record) throw new NotFoundException('Historial no encontrado');
+
+    const doc = await this.medicalRecordsService.findPrescriptionDocument(id, user.companyId);
+    if (!doc) {
+      await this.medicalRecordsService.generateAndStorePrescription(id, user.companyId);
+      const newDoc = await this.medicalRecordsService.findPrescriptionDocument(id, user.companyId);
+      return { url: newDoc?.cloudinaryUrl || null };
+    }
+    return { url: doc.cloudinaryUrl };
   }
 }

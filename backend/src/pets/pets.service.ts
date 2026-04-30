@@ -21,6 +21,7 @@ export class PetsService {
 
     const where = {
       companyId,
+      isDeleted: false,
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },
@@ -114,42 +115,43 @@ export class PetsService {
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
 
-    const photos = await this.prisma.petPhoto.findMany({ where: { petId: id } });
-    for (const photo of photos) {
-      try {
-        await this.cloudinary.deleteImage(photo.cloudinaryId);
-      } catch (e) {
-        this.logger.warn(`Error deleting photo: ${e.message}`);
-      }
-    }
-
-    await this.prisma.pet.delete({ where: { id } });
-    this.logger.log(`Mascota eliminada: ${id}`);
+    await this.prisma.pet.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+    this.logger.log(`Mascota eliminada (soft delete): ${id}`);
   }
 
-  async uploadPhoto(id: string, companyId: string, file: string, folder: string) {
-    const pet = await this.findOne(id, companyId);
-    const isPrimary = pet.photos.length === 0;
+  async uploadPhoto(petId: string, companyId: string, fileBuffer: Buffer, mimeType: string) {
+    const pet = await this.prisma.pet.findFirst({
+      where: { id: petId, companyId },
+      include: { client: true, company: { select: { slug: true } } },
+    });
+    if (!pet) throw new NotFoundException('Mascota no encontrada');
 
-    const result = await this.cloudinary.uploadImage(file, folder, {
-      publicId: `${folder}/${pet.id}-${Date.now()}`,
+    const photosCount = await this.prisma.petPhoto.count({ where: { petId } });
+    if (photosCount >= 5) throw new BadRequestException('Máximo 5 fotos por mascota');
+
+    const clientFolder = pet.client
+      ? pet.client.name.replace(/\s+/g, '_').toLowerCase()
+      : 'sin_dueno';
+    const folder = `patasoft/${pet.company.slug}/${clientFolder}`;
+
+    const base64 = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+    const result = await this.cloudinary.getClient().uploader.upload(base64, {
+      folder,
+      resource_type: 'image',
     });
 
+    const isPrimary = photosCount === 0;
     const photo = await this.prisma.petPhoto.create({
       data: {
-        petId: id,
-        cloudinaryUrl: result.url,
-        cloudinaryId: result.publicId,
+        petId,
+        cloudinaryUrl: result.secure_url,
+        cloudinaryId: result.public_id,
         isPrimary,
       },
     });
-
-    if (isPrimary) {
-      await this.prisma.pet.update({
-        where: { id },
-        data: { photos: { connect: { id: photo.id } } },
-      });
-    }
 
     return photo;
   }

@@ -22,6 +22,7 @@ export class PaymentsService {
     const skip = (Number(page) - 1) * Number(limit);
     const where: any = { 
       companyId, 
+      isDeleted: false,
       ...(status && { status: status as PaymentStatus }), 
       ...(clientId && { clientId }) 
     };
@@ -48,12 +49,18 @@ export class PaymentsService {
   }
 
   async findOne(id: string, companyId: string) {
-    const p = await this.prisma.payment.findFirst({ 
-      where: { id, companyId }, 
-      include: { client: true, pet: true, items: true, debt: true } 
+    const payment = await this.prisma.payment.findFirst({
+      where: { id, companyId, isDeleted: false },
+      include: {
+        client: true,
+        pet: true,
+        items: true,
+        medicalRecord: true,
+        debt: true,
+      },
     });
-    if (!p) throw new NotFoundException('Pago no encontrado');
-    return p;
+    if (!payment) throw new NotFoundException('Pago no encontrado');
+    return payment;
   }
 
   async create(companyId: string, dto: CreatePaymentDto) {
@@ -62,7 +69,7 @@ export class PaymentsService {
       quantity: i.quantity, 
       unitPrice: i.unitPrice, 
       totalPrice: i.totalPrice, 
-      itemType: i.itemType 
+      itemType: i.itemType || 'SUPPLY',
     })) || [];
 
     const payment = await this.prisma.payment.create({
@@ -81,6 +88,20 @@ export class PaymentsService {
       include: { items: true },
     });
     this.logger.log(`Pago creado: ${payment.id}`);
+
+    // Descontar stock de items con supplyId
+    for (const item of dto.items || []) {
+      if (!item.supplyId) continue;
+      const supply = await this.prisma.supply.findUnique({ where: { id: item.supplyId } });
+      if (!supply) continue;
+      const qty = item.quantity || 1;
+      const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty / supply.unitsPerStock) : qty;
+      await this.prisma.supply.update({
+        where: { id: item.supplyId },
+        data: { quantity: { decrement: stockUnitsUsed } },
+      });
+      this.logger.log(`Stock descontado: ${supply.name} -${stockUnitsUsed}`);
+    }
 
     if (dto.method === 'CASH' && payment.status !== 'CANCELLED') {
       await this.cashService.createFromPayment(companyId, payment.id, payment.totalAmount);
@@ -115,9 +136,11 @@ export class PaymentsService {
     const updated = await this.prisma.payment.update({ 
       where: { id }, 
       data: { 
-        status: dto.status as PaymentStatus, 
-        paidAmount: dto.paidAmount, 
-        paidAt: dto.paidAt ? new Date(dto.paidAt) : undefined 
+        ...(dto.status && { status: dto.status as PaymentStatus }),
+        ...(dto.method && { method: dto.method as PaymentMethod }),
+        ...(dto.paidAmount !== undefined && { paidAmount: dto.paidAmount }),
+        ...(dto.paidAt && { paidAt: new Date(dto.paidAt) }),
+        ...(dto.dueDate && { dueDate: new Date(dto.dueDate) }),
       }, 
       include: { items: true, debt: true } 
     });
@@ -136,17 +159,41 @@ export class PaymentsService {
           data: { status: 'PAID', paidAt: new Date() }
         });
       }
+      // Generar comprobante PDF si no tiene cloudinaryUrl
+      if (!updated.cloudinaryUrl) {
+        this.pdfService.generateAndStoreReceipt(id, companyId).catch(e =>
+          this.logger.error('Error generando comprobante al pagar', e)
+        );
+      }
     }
+
+    // Si es DEFERRED y tiene clientId, crear deuda
+    if (dto.status === 'DEFERRED' && payment.clientId && dto.dueDate) {
+      const existingDebt = await this.prisma.debt.findFirst({ where: { paymentId: id } });
+      if (!existingDebt) {
+        await this.prisma.debt.create({
+          data: {
+            companyId,
+            clientId: payment.clientId,
+            paymentId: id,
+            amount: payment.totalAmount,
+            dueDate: new Date(dto.dueDate),
+            interestRate: dto.interestRate || null,
+            originalAmount: payment.totalAmount,
+          },
+        });
+      }
+    }
+
     return updated;
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
-    await this.prisma.payment.update({
+    return this.prisma.payment.update({
       where: { id },
-      data: { isDeleted: true, deletedAt: new Date() } as any,
+      data: { isDeleted: true, deletedAt: new Date() },
     });
-    this.logger.log(`Pago eliminado (soft): ${id}`);
   }
 
   async generateCheckoutLink(id: string, companyId: string) {

@@ -67,17 +67,17 @@ export class AuthController {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     
     // Verificar si el usuario tiene empresa asociada
-    if (!req.user.companyId) {
+if (!req.user.companyId) {
       console.log('[Google Callback] Usuario sin empresa, redirigiendo a onboarding');
       return res.redirect(
-        `${frontendUrl}/onboarding?token=${tokens.accessToken}&refresh=${tokens.refreshToken}&needsCompany=true`
+        `${frontendUrl}/onboarding?token=${encodeURIComponent(tokens.accessToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}&needsCompany=true`
       );
     }
-    
-    console.log('[Google Callback] Redirigiendo a:', `${frontendUrl}/auth/callback`);
-    
+
+    console.log('[Google Callback] Redirigiendo a:', `${frontendUrl}/auth/callback?token=${encodeURIComponent(tokens.accessToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}`);
+
     return res.redirect(
-      `${frontendUrl}/auth/callback?token=${tokens.accessToken}&refresh=${tokens.refreshToken}`
+      `${frontendUrl}/auth/callback?token=${encodeURIComponent(tokens.accessToken)}&refresh=${encodeURIComponent(tokens.refreshToken)}`
     );
   }
 

@@ -150,16 +150,32 @@ export class SuppliesService {
     const sheet = workbook.addWorksheet('Plantilla Insumos');
     
     sheet.columns = [
-      { header: 'Nombre', key: 'name', width: 30 },
-      { header: 'Marca', key: 'brand', width: 20 },
-      { header: 'Categoría', key: 'category', width: 20 },
-      { header: 'Unidad', key: 'unit', width: 10 },
-      { header: 'Cantidad', key: 'quantity', width: 10 },
-      { header: 'Precio Unitario', key: 'unitPrice', width: 15 },
-      { header: 'Stock Mínimo', key: 'minQuantity', width: 15 },
-      { header: 'Vencimiento (YYYY-MM-DD)', key: 'expiresAt', width: 25 },
+      { header: 'nombre *', key: 'name', width: 30 },
+      { header: 'marca', key: 'brand', width: 20 },
+      { header: 'categoria', key: 'category', width: 20 },
+      { header: 'stockUnit (ej: caja)', key: 'stockUnit', width: 15 },
+      { header: 'unitsPerStock (ej: 15)', key: 'unitsPerStock', width: 18 },
+      { header: 'dispensingUnit (ej: jeringa)', key: 'dispensingUnit', width: 20 },
+      { header: 'cantidad *', key: 'quantity', width: 10 },
+      { header: 'precio_costo *', key: 'unitPrice', width: 15 },
+      { header: 'precio_venta', key: 'salePrice', width: 15 },
+      { header: 'cantidad_minima', key: 'minQuantity', width: 15 },
+      { header: 'fecha_vencimiento', key: 'expiresAt', width: 25 },
     ];
-
+    
+    // Add reference sheet
+    const refSheet = workbook.addWorksheet('Referencia');
+    refSheet.columns = [
+      { header: 'Campo', key: 'field', width: 20 },
+      { header: 'Descripción', key: 'desc', width: 50 },
+    ];
+    refSheet.addRow({ field: 'stockUnit', desc: 'Unidad de compra (ej: caja, frasco, blíster)' });
+    refSheet.addRow({ field: 'unitsPerStock', desc: 'Cuántas unidades individuales contiene (ej: 15 jeringas por caja)' });
+    refSheet.addRow({ field: 'dispensingUnit', desc: 'Unidad de venta/uso (ej: jeringa, comprimido)' });
+    refSheet.addRow({ field: 'precio_costo', desc: 'Precio que pagás al proveedor por unidad de stock' });
+    refSheet.addRow({ field: 'precio_venta', desc: 'Precio de venta por unidad de stock al cliente' });
+    refSheet.addRow({ field: 'NOTA', desc: 'El precio unitario individual se calcula como: precio_venta / unitsPerStock' });
+    
     return workbook.xlsx.writeBuffer();
   }
 
@@ -222,52 +238,39 @@ export class SuppliesService {
     await workbook.xlsx.load(bufferToUse as any);
     const sheet = workbook.getWorksheet(1);
     
-    const results = { imported: 0, errors: [] };
-
+    const results = { imported: 0, errors: [] as string[] };
+    
     for (let i = 2; i <= sheet.rowCount; i++) {
       const row = sheet.getRow(i);
-      const name = row.getCell(1).text;
+      const name = row.getCell(1).text?.trim();
       if (!name) continue;
-
+      
       try {
-        const existing = await this.prisma.supply.findFirst({
-          where: { name, companyId }
-        });
+        const data = {
+          brand: row.getCell(2).text || undefined,
+          category: row.getCell(3).text || undefined,
+          stockUnit: row.getCell(4).text || undefined,
+          unitsPerStock: row.getCell(5).value ? Number(row.getCell(5).value) : undefined,
+          dispensingUnit: row.getCell(6).text || undefined,
+          unit: row.getCell(4).text || undefined, // backward compat
+          quantity: row.getCell(7).value !== null ? Number(row.getCell(7).value) : 0,
+          unitPrice: row.getCell(8).value !== null ? Number(row.getCell(8).value) : 0,
+          salePrice: row.getCell(9).value !== null ? Number(row.getCell(9).value) : undefined,
+          minQuantity: row.getCell(10).value !== null ? Number(row.getCell(10).value) : undefined,
+          expiresAt: row.getCell(11).text ? new Date(row.getCell(11).text) : undefined,
+        };
 
+        const existing = await this.prisma.supply.findFirst({ where: { name, companyId } });
         if (existing) {
-          await this.prisma.supply.update({
-            where: { id: existing.id },
-            data: {
-              brand: row.getCell(2).text || existing.brand,
-              category: row.getCell(3).text || existing.category,
-              unit: row.getCell(4).text || existing.unit,
-              quantity: row.getCell(5).value !== null ? Number(row.getCell(5).value) : existing.quantity,
-              unitPrice: row.getCell(6).value !== null ? Number(row.getCell(6).value) : existing.unitPrice,
-              minQuantity: row.getCell(7).value !== null ? Number(row.getCell(7).value) : existing.minQuantity,
-            }
-          });
+          await this.prisma.supply.update({ where: { id: existing.id }, data });
         } else {
-          await this.prisma.supply.create({
-            data: {
-              companyId,
-              name,
-              brand: row.getCell(2).text,
-              category: row.getCell(3).text,
-              unit: row.getCell(4).text,
-              quantity: Number(row.getCell(5).value) || 0,
-              unitPrice: Number(row.getCell(6).value) || 0,
-              minQuantity: Number(row.getCell(7).value) || null,
-              initialQty: Number(row.getCell(5).value) || 0,
-              expiresAt: row.getCell(8).value ? new Date(row.getCell(8).text) : null,
-            }
-          });
+          await this.prisma.supply.create({ data: { companyId, name, ...data } });
         }
         results.imported++;
       } catch (e) {
         results.errors.push(`Fila ${i}: ${e.message}`);
       }
     }
-
     return results;
   }
 }

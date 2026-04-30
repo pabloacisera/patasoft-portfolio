@@ -10,6 +10,12 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    fs: {
+      mimeTypes: {
+        '.js': 'text/javascript',
+        '.jsx': 'text/javascript',
+      },
+    },
   },
   build: {
     outDir: 'dist',

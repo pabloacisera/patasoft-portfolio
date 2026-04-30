@@ -1,7 +1,6 @@
 import { api } from '../services/api.js';
 import { isAuthenticated } from '../stores/auth.store.js';
 import { router } from '../router.js';
-import { renderDashboard } from './dashboard.js';
 
 export function renderLogin() {
   const app = document.getElementById('app');
@@ -175,24 +174,35 @@ export function renderAuthCallback() {
   const refresh = params.get('refresh');
   const needsCompany = params.get('needsCompany');
 
-  console.log('[AuthCallback] Params recibidos:', { 
-    token: token ? token.substring(0, 20) + '...' : null, 
+  console.log('[AuthCallback] URL completa:', window.location.href);
+  console.log('[AuthCallback] search:', window.location.search);
+  console.log('[AuthCallback] pathname:', window.location.pathname);
+  console.log('[AuthCallback] Params recibidos:', {
+    token: token ? token.substring(0, 20) + '...' : null,
     refresh: refresh ? 'presente' : null,
     needsCompany,
-    fullUrl: window.location.href
+    allParams: Object.fromEntries(params)
   });
+  console.log('[AuthCallback] isAuthenticated():', isAuthenticated());
+  console.log('[AuthCallback] localStorage token existe:', !!localStorage.getItem('patasoft_auth'));
 
   if (token && refresh) {
     api.setToken(token, refresh);
     console.log('[AuthCallback] Tokens guardados, isAuthenticated:', isAuthenticated());
-    
-    // Si no tiene empresa, redirigir a onboarding
+
     if (needsCompany === 'true') {
       console.log('[AuthCallback] Usuario necesita crear empresa, redirigiendo a onboarding');
       router.navigate('/onboarding');
       return;
     }
-    
+
+    router.navigate('/dashboard');
+  } else if (isAuthenticated()) {
+    console.log('[AuthCallback] Tokens ya en storage, verificando estado...');
+    if (needsCompany === 'true') {
+      router.navigate('/onboarding');
+      return;
+    }
     router.navigate('/dashboard');
   } else {
     console.warn('[AuthCallback] No se recibieron tokens, volviendo al login');

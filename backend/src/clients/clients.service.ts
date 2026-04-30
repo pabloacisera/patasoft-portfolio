@@ -16,6 +16,7 @@ export class ClientsService {
 
     const where = {
       companyId,
+      isDeleted: false,
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },
@@ -99,13 +100,16 @@ export class ClientsService {
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
 
-    const petsCount = await this.prisma.pet.count({ where: { clientId: id } });
+    const petsCount = await this.prisma.pet.count({ where: { clientId: id, isDeleted: false } });
     if (petsCount > 0) {
       throw new BadRequestException('El cliente tiene mascotas asociadas. Eliminar primero las mascotas.');
     }
 
-    await this.prisma.client.delete({ where: { id } });
-    this.logger.log(`Cliente eliminado: ${id}`);
+    await this.prisma.client.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+    this.logger.log(`Cliente eliminado (soft delete): ${id}`);
   }
 
   async getPets(id: string, companyId: string) {

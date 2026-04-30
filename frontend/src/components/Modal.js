@@ -201,7 +201,95 @@ function handleEscape(e) {
   }
 }
 
-export function openModal(options) {
+export function openModal(optionsOrName, extraOptions = {}) {
+  let options;
+  
+  if (typeof optionsOrName === 'string') {
+    const modalName = optionsOrName;
+    const config = window.modalConfigs?.[modalName] || {};
+    const data = extraOptions?.data || {};
+    const type = extraOptions?.type || '';
+    
+    options = {
+      title: extraOptions?.title || config.title || modalName,
+      size: config.size || 'medium',
+      confirmText: 'Guardar',
+      cancelText: 'Cancelar',
+      onConfirm: async () => {
+        const formData = {};
+        config.fields?.forEach(field => {
+          const el = document.getElementById(`modal-field-${field.name}`);
+          if (el) {
+            if (field.type === 'checkbox') {
+              formData[field.name] = el.checked;
+            } else if (field.type === 'select') {
+              formData[field.name] = el.value;
+            } else {
+              formData[field.name] = el.value;
+            }
+          }
+        });
+        
+        if (config.onSubmit) {
+          await config.onSubmit({ ...data, ...formData });
+        }
+      },
+    };
+    
+    options.content = (container) => {
+      let fieldsHTML = '';
+      
+      if (config.fields) {
+        fieldsHTML = config.fields.map(field => {
+          let inputHTML = '';
+          const value = data[field.name] || '';
+          
+          if (field.type === 'select') {
+            inputHTML = `
+              <select id="modal-field-${field.name}" class="form-input" ${field.required ? 'required' : ''}>
+                <option value="">Seleccionar...</option>
+                ${field.options?.map(opt => `
+                  <option value="${opt.value}" ${opt.value === value ? 'selected' : ''}>${opt.label}</option>
+                `).join('')}
+              </select>
+            `;
+          } else if (field.type === 'textarea') {
+            inputHTML = `<textarea id="modal-field-${field.name}" class="form-input" rows="3" ${field.required ? 'required' : ''}>${value}</textarea>`;
+          } else if (field.type === 'checkbox') {
+            inputHTML = `<input type="checkbox" id="modal-field-${field.name}" ${value ? 'checked' : ''}>`;
+          } else if (field.type === 'datetime-local') {
+            inputHTML = `<input type="datetime-local" id="modal-field-${field.name}" class="form-input" value="${value}" ${field.required ? 'required' : ''}">`;
+          } else if (field.type === 'date') {
+            inputHTML = `<input type="date" id="modal-field-${field.name}" class="form-input" value="${value}" ${field.required ? 'required' : ''}>`;
+          } else if (field.type === 'number') {
+            inputHTML = `<input type="number" id="modal-field-${field.name}" class="form-input" step="0.01" value="${value}" ${field.required ? 'required' : ''}>`;
+          } else if (field.type === 'email') {
+            inputHTML = `<input type="email" id="modal-field-${field.name}" class="form-input" value="${value}" ${field.required ? 'required' : ''}>`;
+          } else if (field.type === 'tel') {
+            inputHTML = `<input type="tel" id="modal-field-${field.name}" class="form-input" value="${value}" ${field.required ? 'required' : ''}>`;
+          } else {
+            inputHTML = `<input type="text" id="modal-field-${field.name}" class="form-input" value="${value}" ${field.required ? 'required' : ''}>`;
+          }
+          
+          return `
+            <div class="form-group">
+              <label class="form-label">${field.label}${field.required ? ' *' : ''}</label>
+              ${inputHTML}
+            </div>
+          `;
+        }).join('');
+      }
+      
+      if (type) {
+        fieldsHTML = `<input type="hidden" id="modal-field-type" value="${type}">` + fieldsHTML;
+      }
+      
+      container.innerHTML = fieldsHTML || optionsOrName;
+    };
+  } else {
+    options = optionsOrName;
+  }
+  
   return Modal.open(options);
 }
 

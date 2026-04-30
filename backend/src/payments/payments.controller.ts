@@ -27,6 +27,12 @@ export class PaymentsController {
     return this.s.generateCheckoutLink(id, u.companyId);
   }
 
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  findOne(@Param('id') id: string, @CurrentUser() u: any) {
+    return this.s.findOne(id, u.companyId);
+  }
+
   @Get(':id/receipt')
   @UseGuards(JwtAuthGuard)
   async generateReceipt(@Param('id') id: string, @CurrentUser() u: any, @Res() res: Response) {

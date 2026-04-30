@@ -1,12 +1,14 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
 import { PetsService } from './pets.service';
 import { PdfService } from '../documents/pdf.service';
 import { CreatePetDto, UpdatePetDto } from './dto/pet.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Response } from 'express';
+import { BadRequestException } from '@nestjs/common';
 
 @ApiTags('pets')
 @ApiBearerAuth()
@@ -44,16 +46,23 @@ export class PetsController {
   }
 
   @Post(':id/photos')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      if (!file.mimetype.startsWith('image/')) {
+        return cb(new BadRequestException('Solo se permiten imágenes'), false);
+      }
+      cb(null, true);
+    },
+  }))
   @ApiConsumes('multipart/form-data')
   async uploadPhoto(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: any,
   ) {
-    const pet = await this.petsService.findOne(id, user.companyId);
-    const folder = `patasoft/pets`;
-    return this.petsService.uploadPhoto(id, user.companyId, file.path, folder);
+    if (!file) throw new BadRequestException('No se recibió imagen');
+    return this.petsService.uploadPhoto(id, user.companyId, file.buffer, file.mimetype);
   }
 
   @Delete(':id/photos/:photoId')

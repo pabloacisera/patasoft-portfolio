@@ -164,6 +164,11 @@ class ApiClient {
     return data;
   }
 
+  // Alias for postFormData
+  postForm(path, formData) {
+    return this.postFormData(path, formData);
+  }
+
   post(endpoint, data = {}) {
     const body = data instanceof FormData ? data : JSON.stringify(data);
     return this.request(endpoint, { method: 'POST', body });

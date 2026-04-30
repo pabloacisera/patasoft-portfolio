@@ -45,4 +45,24 @@ export class CashSummaryQueryDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  page?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ enum: ['INCOME', 'EXPENSE'] })
+  @IsOptional()
+  @IsEnum(CashMovementType)
+  type?: CashMovementType;
 }

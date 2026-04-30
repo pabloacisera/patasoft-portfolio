@@ -4,7 +4,7 @@ import { connect, disconnect } from './services/socket.js';
 import { api } from './services/api.js';
 
 import { renderLogin, renderRegister, renderAuthCallback } from './pages/auth.js';
-import { renderDashboard, renderDashboardHome } from './pages/dashboard.js';
+import { renderDashboard, renderDashboardHome } from './pages/dashboard.jsx';
 
 const PUBLIC_ROUTES = ['/login', '/register', '/onboarding', '/auth/callback'];
 const AUTH_ROUTES = ['/dashboard', '/settings', '/admin', '/api/v1/auth/google'];
@@ -16,24 +16,24 @@ router.register('/onboarding', { render: () => import('./pages/onboarding.js').t
 router.register('/', { render: renderDashboardHome });
 router.register('/dashboard', { render: renderDashboard });
 router.register('/dashboard/home', { render: renderDashboardHome });
-router.register('/dashboard/clients', { render: () => import('./pages/dashboard.js').then(m => m.renderClients()) });
-router.register('/dashboard/pets', { render: () => import('./pages/dashboard.js').then(m => m.renderPets()) });
-router.register('/dashboard/medical-records', { render: () => import('./pages/dashboard.js').then(m => m.renderMedicalRecords()) });
-router.register('/dashboard/payments', { render: () => import('./pages/dashboard.js').then(m => m.renderPayments()) });
-router.register('/dashboard/supplies', { render: () => import('./pages/dashboard.js').then(m => m.renderSupplies()) });
-router.register('/dashboard/ai-chat', { render: () => import('./pages/dashboard.js').then(m => m.renderAIChat()) });
-router.register('/dashboard/cash-register', { render: () => import('./pages/dashboard.js').then(m => m.renderCashRegister()) });
-router.register('/dashboard/connections', { render: () => import('./pages/dashboard.js').then(m => m.renderConnections()) });
-router.register('/dashboard/documents', { render: () => import('./pages/dashboard.js').then(m => m.renderDocuments()) });
-router.register('/settings', { render: () => import('./pages/dashboard.js').then(m => m.renderSettings()) });
-router.register('/settings/company', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsCompany()) });
-router.register('/settings/subscription', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsSubscription()) });
-router.register('/settings/mercadopago', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsMercadoPago()) });
-router.register('/settings/prices', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsPrices()) });
-router.register('/settings/ai', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsAI()) });
-router.register('/settings/connections', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsConnections()) });
+router.register('/dashboard/clients', { render: () => import('./pages/dashboard.jsx').then(m => m.renderClients()) });
+router.register('/dashboard/pets', { render: () => import('./pages/dashboard.jsx').then(m => m.renderPets()) });
+router.register('/dashboard/medical-records', { render: () => import('./pages/dashboard.jsx').then(m => m.renderMedicalRecords()) });
+router.register('/dashboard/payments', { render: () => import('./pages/dashboard.jsx').then(m => m.renderPayments()) });
+router.register('/dashboard/supplies', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSupplies()) });
+router.register('/dashboard/ai-chat', { render: () => import('./pages/dashboard.jsx').then(m => m.renderAIChat()) });
+router.register('/dashboard/cash-register', { render: () => import('./pages/dashboard.jsx').then(m => m.renderCashRegister()) });
+router.register('/dashboard/connections', { render: () => import('./pages/dashboard.jsx').then(m => m.renderConnections()) });
+router.register('/dashboard/documents', { render: () => import('./pages/dashboard.jsx').then(m => m.renderDocuments()) });
+router.register('/settings', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettings()) });
+router.register('/settings/company', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsCompany()) });
+router.register('/settings/subscription', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsSubscription()) });
+router.register('/settings/mercadopago', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsMercadoPago()) });
+router.register('/settings/prices', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsPrices()) });
+router.register('/settings/ai', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsAI()) });
+router.register('/settings/connections', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsConnections()) });
 router.register('/admin', { render: () => import('./pages/admin.js').then(m => m.renderAdmin()) });
-router.register('/superadmin/subscriptions', { render: () => import('./pages/dashboard.js').then(m => m.renderSuperAdminSubscriptions()) });
+router.register('/superadmin/subscriptions', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSuperAdminSubscriptions()) });
 
 function checkAuth(pathname) {
   if (PUBLIC_ROUTES.includes(pathname)) {
@@ -63,8 +63,12 @@ function getDefaultRoute(pathname) {
   return null;
 }
 
+window._router = router;
+
 async function initApp() {
   const pathname = location.pathname;
+
+  loadFromStorage();
 
   const params = new URLSearchParams(location.search);
   const token = params.get('token');
@@ -73,8 +77,6 @@ async function initApp() {
     api.setToken(token, refresh);
     window.history.replaceState({}, '', pathname);
   }
-
-  loadFromStorage();
 
   if (!checkAuth(pathname)) {
     router.navigate('/login', false);

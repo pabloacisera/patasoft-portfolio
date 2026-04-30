@@ -40,28 +40,40 @@ export class DebtsService {
     return this.prisma.debt.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
   }
 
-  async markPaid(id: string, companyId: string, dto?: { method?: string }) {
+  async markPaid(id: string, companyId: string, dto?: { method?: string, amount?: number }) {
     const debt = await this.findOne(id, companyId);
-    const { amount: finalAmount, breakdown } = this.calculateDebtAmount(debt);
+    const pendingAmount = debt.amount - (debt.payment?.paidAmount || 0);
+    
+    const amountToPay = dto?.amount ? Number(dto.amount) : pendingAmount;
+    
+    // Si es pago parcial, no marcar como PAID
+    const isPartial = amountToPay < pendingAmount - 0.01;
+    
+    const updateData: any = {};
+    if (isPartial) {
+      updateData.amount = pendingAmount - amountToPay;
+    } else {
+      updateData.status = 'PAID';
+      updateData.paidAt = new Date();
+    }
     
     await this.prisma.debt.update({
       where: { id },
-      data: { 
-        status: 'PAID', 
-        paidAt: new Date(),
-        amount: finalAmount,
-      }
+      data: updateData
     });
 
     if (debt.paymentId) {
       await this.prisma.payment.update({
         where: { id: debt.paymentId },
-        data: { status: 'PAID', paidAmount: finalAmount, paidAt: new Date() }
+        data: { 
+          paidAmount: (debt.payment?.paidAmount || 0) + amountToPay,
+          ...(isPartial ? {} : { status: 'PAID', paidAt: new Date() })
+        }
       });
     }
-
-    this.logger.log(`Deuda ${id} pagada: ${breakdown}`);
-    return { success: true, amount: finalAmount, breakdown };
+    
+    this.logger.log(`Deuda ${id} pago procesado: $${amountToPay}`);
+    return { success: true, amount: amountToPay, isPartial };
   }
 
   calculateDebtAmount(debt: any): { amount: number; breakdown: string } {
