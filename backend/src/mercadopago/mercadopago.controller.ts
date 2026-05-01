@@ -5,11 +5,15 @@ import { CreatePreferenceDto, QrPaymentDto } from './dto/mercadopago.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { ConfigService } from '@nestjs/config';
 
 @ApiTags('mercadopago')
 @Controller('api/v1/mercadopago')
 export class MercadopagoController {
-  constructor(private mpService: MercadopagoService) {}
+  constructor(
+    private mpService: MercadopagoService,
+    private config: ConfigService,
+  ) {}
 
   @Post('preference')
   @ApiBearerAuth()
@@ -26,9 +30,12 @@ export class MercadopagoController {
   }
 
   @Post('webhook')
+  @Public()
   @ApiOperation({ summary: 'Webhook de MercadoPago (sin auth)' })
-  webhook(@Body() body: { topic: string; id: string }) {
-    return this.mpService.handleWebhook(body.topic, body.id);
+  webhook(@Query('topic') topic: string, @Query('id') id: string, @Body() body: any) {
+    const t = topic || body?.topic || body?.type;
+    const paymentId = id || body?.id || body?.data?.id;
+    return this.mpService.handleWebhook(t, paymentId);
   }
 
   @Get('status/:mpPaymentId')
@@ -41,12 +48,13 @@ export class MercadopagoController {
   @Get('oauth/connect')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  oauthConnect(@CurrentUser() user: any, @Res() res: any) {
-    const appId = process.env.MP_APP_ID;
-    const redirectUri = encodeURIComponent(`${process.env.BACKEND_URL}/api/v1/mercadopago/oauth/callback`);
+  oauthConnect(@CurrentUser() user: any) {
+    const appId = this.config.get('MP_APP_ID');
+    const backendUrl = this.config.get('BACKEND_URL');
+    const redirectUri = encodeURIComponent(`${backendUrl}/api/v1/mercadopago/oauth/callback`);
     const state = Buffer.from(JSON.stringify({ companyId: user.companyId, userId: user.id })).toString('base64');
     const url = `https://auth.mercadopago.com/authorization?client_id=${appId}&response_type=code&platform_id=mp&state=${state}&redirect_uri=${redirectUri}`;
-    return res.redirect(url);
+    return { url };
   }
 
   @Get('oauth/callback')
@@ -55,9 +63,9 @@ export class MercadopagoController {
     try {
       const { companyId } = JSON.parse(Buffer.from(state, 'base64').toString());
       await this.mpService.handleOAuthCallback(companyId, code);
-      return res.redirect(`${process.env.FRONTEND_URL}/settings/mercadopago?connected=true`);
+      return res.redirect(`${this.config.get('FRONTEND_URL')}/settings/mercadopago?connected=true`);
     } catch(e) {
-      return res.redirect(`${process.env.FRONTEND_URL}/settings/mercadopago?error=oauth_failed`);
+      return res.redirect(`${this.config.get('FRONTEND_URL')}/settings/mercadopago?error=oauth_failed`);
     }
   }
 

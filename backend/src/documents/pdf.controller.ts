@@ -18,11 +18,12 @@ export class PdfController {
     @CurrentUser() user: any,
     @Res() res: Response,
   ) {
-    const pdf = await this.pdfService.generatePetCard(petId, user.companyId);
+    // Use generateMedicalHistory for complete medical history
+    const pdf = await this.pdfService.generateMedicalHistory(petId, user.companyId);
     
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="ficha-mascota-${petId}.pdf"`,
+      'Content-Disposition': `attachment; filename="historia-completa-${petId.slice(-6)}.pdf"`,
     });
     
     res.send(pdf);

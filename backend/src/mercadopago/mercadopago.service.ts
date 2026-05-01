@@ -189,7 +189,13 @@ export class MercadopagoService {
     this.logger.log(`POS creado para empresa ${companyId}`);
   }
 
-  async handleWebhook(topic: string, id: string) {
+  async handleWebhook(topicOrType: string, id: string) {
+    // Normalize topic/type - MP can send topic as query param or type in body
+    let topic = topicOrType;
+    if (topicOrType === 'payment.created' || topicOrType === 'payment.updated') {
+      topic = 'payment';
+    }
+    
     this.logger.log(`Webhook received: topic=${topic}, id=${id}`);
 
     if (topic === 'payment') {

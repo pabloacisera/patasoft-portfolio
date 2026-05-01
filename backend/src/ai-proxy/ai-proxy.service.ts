@@ -23,13 +23,27 @@ export class AiProxyService {
 
     if (!config) throw new NotFoundException('Configuración de empresa no encontrada');
 
+    // Build messages array in the format expected by ai-service
+    const messages = [];
+    // Add history
+    if (dto.history && Array.isArray(dto.history)) {
+      for (const h of dto.history) {
+        if (h.role && h.content) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
+    }
+    // Add current user message
+    messages.push({ role: 'user', content: dto.message });
+
     const payload = {
-      message: dto.message,
-      model: dto.model || config.defaultAIModel,
-      history: dto.history || [],
+      messages,
+      model: dto.model || config.defaultAIModel || 'llama-3.3-70b-versatile',
       company_id: companyId,
       company_name: config.company.name,
-      specialties: config.company.animalSpecialties,
+      company_address: config.company.address || '',
+      specialties: config.company.animalSpecialties || [],
+      session_id: dto.sessionId || companyId,
     };
 
     try {

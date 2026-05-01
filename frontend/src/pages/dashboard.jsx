@@ -1200,6 +1200,22 @@ async function renderMedicalRecordsPage(content) {
     listEl.querySelectorAll('[data-action="view"]').forEach(btn => {
       btn.addEventListener('click', () => showViewRecordModal(btn.dataset.id));
     });
+
+    listEl.querySelectorAll('[data-action="download-record-pdf"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          const blob = await api.getBlob(`/medical-records/${btn.dataset.id}/pdf`);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `consulta-${btn.dataset.id.slice(-6)}.pdf`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          showToast('Error al generar el PDF', 'error');
+        }
+      });
+    });
     
     listEl.querySelectorAll('[data-action="edit"]').forEach(btn => {
       btn.addEventListener('click', () => showEditRecordModal(btn.dataset.id));
@@ -2281,12 +2297,14 @@ async function renderPaymentsPage(content) {
       </div>
       <button class="btn btn-primary" id="new-payment-btn">Nuevo Cobro</button>
     </div>
-    <div id="tab-payments" class="tab-content active">
-      <div id="payments-list"></div>
-    </div>
-    <div id="tab-debts" class="tab-content">
-      <div id="debts-list"></div>
-    </div>
+     <div id="tab-payments" class="tab-content active">
+       <div id="payments-list"></div>
+       <div id="payments-pagination"></div>
+     </div>
+     <div id="tab-debts" class="tab-content">
+       <div id="debts-list"></div>
+       <div id="debts-pagination"></div>
+     </div>
   `;
   
   document.querySelectorAll('.tab').forEach(tab => {
@@ -2321,8 +2339,37 @@ async function renderPaymentsPage(content) {
     paymentsEl.querySelectorAll('[data-action="view-payment"]').forEach(btn => {
       btn.addEventListener('click', () => showPaymentDetail(btn.dataset.id));
     });
+    paymentsEl.querySelectorAll('[data-action="download-receipt"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          const blob = await api.getBlob(`/payments/${btn.dataset.id}/receipt`);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `recibo-${btn.dataset.id.slice(-6)}.pdf`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          showToast('Error al generar el PDF', 'error');
+        }
+      });
+    });
   } else {
     paymentsEl.innerHTML = '<div class="empty-state"><p>No hay cobros</p></div>';
+  }
+
+  const paymentsPaginationEl = document.getElementById('payments-pagination');
+  if (pageData.payments?.meta?.totalPages > 1) {
+    const pagination = createPagination({
+      total: pageData.payments.meta.total,
+      page: pageData.payments.page || 1,
+      limit: 20,
+      onPageChange: async (newPage) => {
+        await loadPaymentsData(newPage, pageData.payments?.status || '');
+        renderPaymentsPage(document.getElementById('page-content'));
+      }
+    });
+    paymentsPaginationEl.appendChild(pagination);
   }
   
   const debtsEl = document.getElementById('debts-list');
@@ -2584,9 +2631,13 @@ async function renderChatPage(content) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
     
     try {
-      const { message } = await api.post('/ai/chat', { messages: chatHistory });
+      const { message } = await api.post('/ai/chat', {
+        message: msg,
+        history: chatHistory.slice(0, -1),
+        sessionId: 'chat_' + Date.now(),
+      });
       chatHistory.push(message);
-      
+       
       messagesEl.querySelector('.typing')?.remove();
       messagesEl.innerHTML += `<div class="chat-message assistant">${message.content}</div>`;
     } catch (e) {
@@ -3097,6 +3148,15 @@ async function renderSettingsMercadoPagoContent(content) {
       </div>
     `;
     
+    document.getElementById('mp-connect-btn')?.addEventListener('click', async () => {
+      try {
+        const { url } = await api.get('/mercadopago/oauth/connect');
+        window.location.href = url;
+      } catch (e) {
+        showToast(e.message || 'Error al conectar con MercadoPago', 'error');
+      }
+    });
+
     document.getElementById('mp-disconnect-btn')?.addEventListener('click', async () => {
       const confirmed = window.confirm('¿Desconectar tu cuenta de MercadoPago? No podrás recibir pagos electrónicos.');
       if (!confirmed) return;

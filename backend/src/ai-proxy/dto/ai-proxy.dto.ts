@@ -16,6 +16,11 @@ export class ChatDto {
   @IsArray()
   @IsOptional()
   history?: any[];
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  sessionId?: string;
 }
 
 export class TranscribeDto {

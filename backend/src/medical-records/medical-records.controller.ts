@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { MedicalRecordsService } from './medical-records.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { NotFoundException } from '@nestjs/common';
+import { Response } from 'express';
+import { PdfService } from '../documents/pdf.service';
 
 @ApiTags('medical-records')
 @ApiBearerAuth()
