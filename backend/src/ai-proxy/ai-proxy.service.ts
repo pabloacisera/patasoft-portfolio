@@ -23,9 +23,7 @@ export class AiProxyService {
 
     if (!config) throw new NotFoundException('Configuración de empresa no encontrada');
 
-    // Build messages array in the format expected by ai-service
     const messages = [];
-    // Add history
     if (dto.history && Array.isArray(dto.history)) {
       for (const h of dto.history) {
         if (h.role && h.content) {
@@ -33,7 +31,6 @@ export class AiProxyService {
         }
       }
     }
-    // Add current user message
     messages.push({ role: 'user', content: dto.message });
 
     const payload = {
@@ -94,7 +91,6 @@ export class AiProxyService {
       return await response.json();
     } catch (error) {
       this.logger.error(`AI Proxy models error: ${error.message}`);
-      // Fallback a modelos conocidos si falla la conexión
       return {
         models: [
           'gpt-4o',
@@ -106,23 +102,21 @@ export class AiProxyService {
   }
 
   async uploadRag(companyId: string, file: Express.Multer.File) {
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       throw new InternalServerErrorException('El archivo supera el límite de 10MB');
     }
 
-    const allowedTypes = ['application/pdf', 'text/plain'];
-    if (!allowedTypes.includes(file.mimetype)) {
-      throw new InternalServerErrorException('Tipo de archivo no permitido. Solo PDF y TXT');
+    const allowedTypes = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.mimetype) && !file.originalname.match(/\.(xlsx?|csv)$/)) {
+      throw new InternalServerErrorException('Tipo de archivo no permitido. Se aceptan PDF, TXT, Excel e imágenes');
     }
 
-    // Leer contenido del archivo
     let content: string;
     if (file.mimetype === 'text/plain') {
       content = file.buffer.toString('utf-8');
     } else {
-      // PDF - extracción básica (el ai-service puede procesarlo mejor)
-      content = `[Documento PDF: ${file.originalname}]`;
+      content = `[Documento: ${file.originalname} - Tipo: ${file.mimetype}]`;
     }
 
     try {
@@ -157,7 +151,6 @@ export class AiProxyService {
   }
 
   async syncRagData(companyId: string) {
-    // Obtener todos los datos de la empresa para el RAG
     const results = {
       clients: 0,
       pets: 0,
@@ -167,7 +160,6 @@ export class AiProxyService {
     };
 
     try {
-      // 1. Datos de la empresa
       const company = await this.prisma.company.findUnique({ where: { id: companyId } });
       if (company) {
         results.company = {
@@ -176,7 +168,6 @@ export class AiProxyService {
         };
       }
 
-      // 2. Clientes
       const clients = await this.prisma.client.findMany({ where: { companyId } });
       results.clients = clients.length;
       if (clients.length > 0) {
@@ -184,11 +175,9 @@ export class AiProxyService {
           content: `Cliente: ${c.name}. DNI: ${c.dni || 'N/A'}. Email: ${c.email || 'N/A'}. Teléfono: ${c.phone || 'N/A'}. Dirección: ${c.address || 'N/A'}.`,
           metadata: { source: 'client', clientId: c.id, name: c.name }
         }));
-
         await this.sendToRag(companyId, clientDocs);
       }
 
-      // 3. Mascotas
       const pets = await this.prisma.pet.findMany({ 
         where: { companyId },
         include: { client: true }
@@ -207,11 +196,9 @@ export class AiProxyService {
             metadata: { source: 'pet', petId: p.id, name: p.name }
           };
         });
-
         await this.sendToRag(companyId, petDocs);
       }
 
-      // 4. Insumos/Stock
       const supplies = await this.prisma.supply.findMany({ where: { companyId } });
       results.supplies = supplies.length;
       if (supplies.length > 0) {
@@ -219,15 +206,13 @@ export class AiProxyService {
           content: `Insumo: ${s.name}. Marca: ${s.brand || 'N/A'}. Cantidad: ${s.quantity}. Unidad: ${s.unit || 'unidad'}. Precio: $${s.unitPrice}. Stock mínimo: ${s.minQuantity || 10}.`,
           metadata: { source: 'supply', supplyId: s.id, name: s.name }
         }));
-
         await this.sendToRag(companyId, supplyDocs);
       }
 
-      // 5. Historiales médicos
       const medicalRecords = await this.prisma.medicalRecord.findMany({
         where: { pet: { companyId } },
         include: { pet: true },
-        take: 100, // Limitar a los últimos 100
+        take: 100,
       });
       results.medicalRecords = medicalRecords.length;
       if (medicalRecords.length > 0) {
@@ -235,11 +220,9 @@ export class AiProxyService {
           content: `Historia médica de ${r.pet?.name || 'mascota'}. Fecha: ${r.date}. Motivo: ${r.visitReason}. Diagnóstico: ${r.diagnosis || 'N/A'}. Tratamiento: ${r.treatment || 'N/A'}. Observaciones: ${r.observations || 'Sin observaciones'}.`,
           metadata: { source: 'medicalrecord', recordId: r.id, petId: r.petId, date: r.date }
         }));
-
         await this.sendToRag(companyId, recordDocs);
       }
 
-      // 6. Datos de la empresa también
       if (results.company) {
         await this.sendToRag(companyId, [results.company]);
       }
@@ -254,7 +237,6 @@ export class AiProxyService {
   }
 
   async getRagStatus(companyId: string) {
-    // Verificar que la empresa exista en nuestra base
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { id: true, name: true },
@@ -268,7 +250,6 @@ export class AiProxyService {
     try {
       const response = await fetch(`${this.aiBaseUrl}/api/v1/rag/status/${companyId}`);
       if (!response.ok) {
-        // Si el servicio de IA responde 404 o error, devolver estado por defecto
         this.logger.warn(`RAG service returned ${response.status} for company ${companyId}`);
         return { synced: false, documentsCount: 0, company: company.name };
       }
@@ -280,7 +261,7 @@ export class AiProxyService {
     }
   }
 
-private async sendToRag(companyId: string, documents: any[]) {
+  async sendToRag(companyId: string, documents: any[]) {
     try {
       await fetch(`${this.aiBaseUrl}/api/v1/rag/documents`, {
         method: 'POST',

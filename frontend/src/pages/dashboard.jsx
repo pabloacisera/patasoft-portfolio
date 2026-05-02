@@ -3124,9 +3124,9 @@ async function renderSettingsMercadoPagoContent(content) {
               <div style="width: 60px; height: 60px; border-radius: 50%; background: rgba(239,68,68,0.1); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">⚠</div>
               <div style="font-weight: 600; color: #991b1b;">Cuenta no conectada</div>
               <div style="font-size: var(--text-sm); color: var(--text-secondary);">Necesitás conectar tu cuenta para recibir pagos electrónicos.</div>
-              <a href="/api/v1/mercadopago/oauth/connect" class="btn btn-primary" id="mp-connect-btn" style="display: inline-block; margin-top: var(--space-2); text-decoration: none;">
+              <button class="btn btn-primary" id="mp-connect-btn" style="margin-top: var(--space-2);">
                 Conectar con MercadoPago
-              </a>
+              </button>
             </div>
           `}
         </div>

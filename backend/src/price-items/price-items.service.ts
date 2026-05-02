@@ -19,11 +19,25 @@ export class PriceItemsService {
     const { page = 1, limit = 20, search, category } = q;
     const skip = (Number(page) - 1) * Number(limit);
     
-    const where: any = { 
-      companyId, 
-      ...(search && { name: { contains: search, mode: 'insensitive' } }), 
-      ...(category && { category }) 
-    };
+    const where: any = { companyId };
+    
+    if (search) {
+      const searchNum = parseFloat(search);
+      const searchConditions: any[] = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { category: { contains: search, mode: 'insensitive' } },
+      ];
+      
+      if (!isNaN(searchNum)) {
+        searchConditions.push({ price: { equals: searchNum } });
+      }
+      
+      where.OR = searchConditions;
+    }
+    
+    if (category) {
+      where.category = category;
+    }
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.priceItem.findMany({ 
@@ -144,7 +158,6 @@ export class PriceItemsService {
   async importFromExcel(companyId: string, buffer: Buffer | Uint8Array) {
     const workbook = new ExcelJS.Workbook();
     const bufferToUse = buffer instanceof Uint8Array ? Buffer.from(buffer) : buffer;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await workbook.xlsx.load(bufferToUse as any);
     const sheet = workbook.getWorksheet(1);
     

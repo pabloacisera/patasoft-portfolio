@@ -1,7 +1,6 @@
-let debounceTimer = null;
-
 export function createSearchBar(options) {
   const { placeholder = 'Buscar...', onSearch, debounce = 300, initialValue = '', clearable = true, showButton = true } = options;
+  let debounceTimer = null;
 
   const container = document.createElement('div');
   container.className = 'search-bar';
@@ -50,6 +49,9 @@ export function createSearchBar(options) {
       if (clearBtn) {
         clearBtn.style.display = input.value ? 'inline-flex' : 'none';
       }
+    }
+    if (onSearch) {
+      handleSearch(input.value.trim());
     }
   });
 

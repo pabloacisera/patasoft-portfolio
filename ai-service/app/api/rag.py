@@ -132,12 +132,12 @@ async def add_documents(request: AddDocumentsRequest):
 async def query_rag(request: QueryRequest):
     """
     Consulta el RAG de una empresa específica.
-    PRIVACIDA: solo retorna documentos de esa empresa.
+    PRIVACIDAD: solo retorna documentos de esa empresa.
     """
     try:
         company_id = request.companyId
         
-        # VALIDACIÓN DE PRIVACIDA
+        # VALIDACIÓN DE PRIVACIDAD
         if not company_id:
             raise HTTPException(status_code=400, detail="companyId es requerido")
         
@@ -160,10 +160,10 @@ async def query_rag(request: QueryRequest):
                 sources=[]
             )
         
-        # Buscar SOLO en文档 de esta empresa
+        # Buscar SOLO en documentos de esta empresa
         docs = vs.similarity_search(request.query, k=request.top_k)
         
-        # Filtrar por companyId en metadata (doble validación)
+        # Filtrar por companyId en metadata (doble validación) - CRÍTICO
         docs = [d for d in docs if d.metadata.get("companyId") == company_id]
         
         if not docs:

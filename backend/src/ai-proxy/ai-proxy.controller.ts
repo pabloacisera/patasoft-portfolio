@@ -1,18 +1,24 @@
-import { Controller, Post, Body, Get, UseGuards, UseInterceptors, UploadedFile, Res, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, UseGuards, UseInterceptors, UploadedFile, Param } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Response } from 'express';
 import { AiProxyService } from './ai-proxy.service';
+import { DocumentProcessorService } from '../queues/document-processor.service';
+import { RagIngestionService } from './rag-ingestion.service';
 import { ChatDto, TranscribeDto } from './dto/ai-proxy.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { BadRequestException } from '@nestjs/common';
 
 @ApiTags('ai-proxy')
 @Controller('api/v1/ai')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AiProxyController {
-  constructor(private readonly aiProxyService: AiProxyService) {}
+  constructor(
+    private readonly aiProxyService: AiProxyService,
+    private readonly documentProcessor: DocumentProcessorService,
+    private readonly ragIngestionService: RagIngestionService,
+  ) {}
 
   @Post('chat')
   @ApiOperation({ summary: 'Proxy de chat con asistente IA' })
@@ -33,17 +39,39 @@ export class AiProxyController {
   }
 
   @Post('rag/upload')
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Subir documento a la base de conocimiento (RAG)' })
   @UseInterceptors(FileInterceptor('file'))
-  uploadRag(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) {
-    return this.aiProxyService.uploadRag(user.companyId, file);
+  async uploadRagDocument(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('companyId') companyId: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    const isExcel = file.mimetype.includes('spreadsheet') || 
+                   file.originalname.match(/\.(xlsx?|csv)$/);
+    
+    if (isExcel) {
+      const jobId = await this.documentProcessor.enqueueDocument({
+        companyId,
+        fileName: file.originalname,
+        fileBuffer: file.buffer,
+        mimeType: file.mimetype,
+      });
+      return { 
+        message: 'Documento encolado para procesamiento',
+        jobId,
+        status: 'processing'
+      };
+    }
+
+    return this.aiProxyService.uploadRag(companyId, file);
   }
 
   @Post('rag/sync')
   @ApiOperation({ summary: 'Sincronizar datos de la empresa al RAG' })
-  syncRag(@CurrentUser() user: any) {
-    return this.aiProxyService.syncRagData(user.companyId);
+  async syncRag(@CurrentUser() user: any) {
+    return this.ragIngestionService.ingestCompanyData(user.companyId);
   }
 
   @Get('rag/status')

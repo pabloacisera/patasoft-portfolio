@@ -286,12 +286,18 @@ export class MercadopagoService {
   }
 
   async handleOAuthCallback(companyId: string, code: string) {
+    const MP_APP_ID = this.config.get('MP_APP_ID');
+    const MP_CLIENT_SECRET = this.config.get('MP_CLIENT_SECRET');
+
     const response = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${MP_CLIENT_SECRET}`,
+      },
       body: JSON.stringify({
-        client_secret: this.config.get('MP_CLIENT_SECRET'),
-        client_id: this.config.get('MP_APP_ID'),
+        client_id: MP_APP_ID,
+        client_secret: MP_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code,
         redirect_uri: `${this.config.get('BACKEND_URL')}/api/v1/mercadopago/oauth/callback`,
@@ -326,12 +332,19 @@ export class MercadopagoService {
   async refreshOAuthToken(companyId: string) {
     const config = await this.prisma.companyConfig.findUnique({ where: { companyId } });
     if (!config?.mpRefreshToken) throw new BadRequestException('No hay refresh token guardado');
+    
+    const MP_APP_ID = this.config.get('MP_APP_ID');
+    const MP_CLIENT_SECRET = this.config.get('MP_CLIENT_SECRET');
+
     const response = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${MP_CLIENT_SECRET}`
+      },
       body: JSON.stringify({
-        client_secret: this.config.get('MP_CLIENT_SECRET'),
-        client_id: this.config.get('MP_APP_ID'),
+        client_id: MP_APP_ID,
+        client_secret: MP_CLIENT_SECRET,
         grant_type: 'refresh_token',
         refresh_token: config.mpRefreshToken,
       }),
