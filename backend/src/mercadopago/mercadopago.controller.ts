@@ -51,7 +51,9 @@ export class MercadopagoController {
   oauthConnect(@CurrentUser() user: any) {
     const appId = this.config.get('MP_APP_ID');
     const backendUrl = this.config.get('BACKEND_URL');
-    const redirectUri = encodeURIComponent(`${backendUrl}/api/v1/mercadopago/oauth/callback`);
+    const redirectUri = encodeURIComponent(
+      this.config.get('MP_REDIRECT_URI') || `${backendUrl}/api/v1/mercadopago/oauth/callback`
+    );
     const state = Buffer.from(JSON.stringify({ companyId: user.companyId, userId: user.id })).toString('base64');
     const url = `https://auth.mercadopago.com/authorization?client_id=${appId}&response_type=code&platform_id=mp&state=${state}&redirect_uri=${redirectUri}`;
     return { url };

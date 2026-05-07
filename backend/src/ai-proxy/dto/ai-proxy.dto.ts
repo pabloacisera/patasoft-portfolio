@@ -1,5 +1,18 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsObject } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+
+export class ChatMessageDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  role: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  content: string;
+}
 
 export class ChatDto {
   @ApiProperty()
@@ -12,10 +25,12 @@ export class ChatDto {
   @IsOptional()
   model?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: [ChatMessageDto] })
   @IsArray()
   @IsOptional()
-  history?: any[];
+  @ValidateNested({ each: true })
+  @Type(() => ChatMessageDto)
+  history?: ChatMessageDto[];
 
   @ApiPropertyOptional()
   @IsString()

@@ -300,7 +300,7 @@ export class MercadopagoService {
         client_secret: MP_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: `${this.config.get('BACKEND_URL')}/api/v1/mercadopago/oauth/callback`,
+        redirect_uri: this.config.get('MP_REDIRECT_URI') || `${this.config.get('BACKEND_URL')}/api/v1/mercadopago/oauth/callback`,
       }),
     });
     if (!response.ok) {

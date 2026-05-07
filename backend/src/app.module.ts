@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
-import { DocumentProcessorService } from './queues/document-processor.service';
+import { QueuesModule } from './queues/queues.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
@@ -34,10 +34,11 @@ import { SupplyPurchasesModule } from './supply-purchases/supply-purchases.modul
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env.production', '.env'],
     }),
     PrismaModule,
     RedisModule,
+    QueuesModule,
     CloudinaryModule,
     HealthModule,
     AuthModule,
@@ -65,7 +66,5 @@ import { SupplyPurchasesModule } from './supply-purchases/supply-purchases.modul
     SuperAdminModule,
     SupplyPurchasesModule,
   ],
-  providers: [DocumentProcessorService],
-  exports: [DocumentProcessorService],
 })
 export class AppModule {}

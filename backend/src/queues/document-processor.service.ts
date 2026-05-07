@@ -8,41 +8,69 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DocumentProcessorService.name);
+  private useRedis: boolean;
+  private redisConnection: any;
   private worker: Worker;
-  private connection: any;
+  private memoryQueue: any; // p-queue instance
 
   constructor(
     private config: ConfigService,
     private aiProxy: AiProxyService,
     private prisma: PrismaService,
   ) {
-    this.connection = {
-      host: this.config.get('REDIS_HOST', 'localhost'),
-      port: this.config.get('REDIS_PORT', 6379),
-      password: this.config.get('REDIS_PASSWORD', undefined),
-    };
+    const redisUrl = this.config.get('REDIS_URL');
+    
+    if (redisUrl) {
+      this.useRedis = true;
+      this.redisConnection = {
+        host: this.config.get('REDIS_HOST', 'localhost'),
+        port: this.config.get('REDIS_PORT', 6379),
+        password: this.config.get('REDIS_PASSWORD', undefined),
+      };
+      this.logger.log('✅ Using BullMQ with Redis');
+    } else {
+      this.useRedis = false;
+      this.logger.log('⚠️ Using p-queue (in-memory) - no Redis available');
+    }
   }
 
   async onModuleInit() {
+    if (this.useRedis) {
+      await this.initBullMQ();
+    } else {
+      await this.initPQueue();
+    }
+  }
+
+  private async initBullMQ() {
     this.worker = new Worker('document-processing', async (job: Job) => {
       const { companyId, fileName, fileBuffer, mimeType } = job.data;
-      this.logger.log(`Processing job ${job.id}: ${fileName}`);
+      this.logger.log(`[BullMQ] Processing job ${job.id}: ${fileName}`);
       await this.processDocument(companyId, fileName, Buffer.from(fileBuffer), mimeType);
-    }, { connection: this.connection });
+    }, { connection: this.redisConnection });
 
     this.worker.on('completed', (job) => {
-      this.logger.log(`Job ${job.id} completed`);
+      this.logger.log(`[BullMQ] Job ${job.id} completed`);
     });
 
     this.worker.on('failed', (job, err) => {
-      this.logger.error(`Job ${job?.id} failed: ${err.message}`);
+      this.logger.error(`[BullMQ] Job ${job?.id} failed: ${err.message}`);
     });
 
-    this.logger.log('Document processor worker initialized');
+    this.logger.log('✅ BullMQ worker initialized');
+  }
+
+  private async initPQueue() {
+    const PQueue = require('p-queue').default;
+    this.memoryQueue = new PQueue({ concurrency: 2 });
+
+    this.logger.log('✅ P-Queue (in-memory) initialized');
   }
 
   async onModuleDestroy() {
-    await this.worker?.close();
+    if (this.useRedis && this.worker) {
+      await this.worker.close();
+    }
   }
 
   async enqueueDocument(data: {
@@ -51,13 +79,37 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
     fileBuffer: Buffer;
     mimeType: string;
   }): Promise<string> {
-    const queue = new Queue('document-processing', { connection: this.connection });
+    if (this.useRedis) {
+      return this.enqueueWithBullMQ(data);
+    } else {
+      return this.enqueueWithPQueue(data);
+    }
+  }
+
+  private async enqueueWithBullMQ(data: any): Promise<string> {
+    const queue = new Queue('document-processing', { connection: this.redisConnection });
     const job = await queue.add('process-document', data, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
     });
     await queue.close();
     return job.id.toString();
+  }
+
+  private async enqueueWithPQueue(data: any): Promise<string> {
+    const jobId = `pqueue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    this.memoryQueue.add(async () => {
+      try {
+        this.logger.log(`[P-Queue] Processing ${data.fileName}`);
+        await this.processDocument(data.companyId, data.fileName, data.fileBuffer, data.mimeType);
+        this.logger.log(`[P-Queue] Completed ${data.fileName}`);
+      } catch (error) {
+        this.logger.error(`[P-Queue] Failed ${data.fileName}: ${error.message}`);
+      }
+    });
+
+    return jobId;
   }
 
   private async processDocument(companyId: string, fileName: string, buffer: Buffer, mimeType: string) {

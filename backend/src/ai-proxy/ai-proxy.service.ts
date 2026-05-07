@@ -2,17 +2,29 @@ import { Injectable, Logger, InternalServerErrorException, NotFoundException } f
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatDto, TranscribeDto } from './dto/ai-proxy.dto';
+import { LocalRagService } from './local-rag.service';
 
 @Injectable()
 export class AiProxyService {
   private readonly logger = new Logger(AiProxyService.name);
+  private readonly scaleMode: string;
   private readonly aiBaseUrl: string;
+  private localRagService: LocalRagService | null;
 
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    localRagService: LocalRagService,
   ) {
-    this.aiBaseUrl = this.config.get<string>('AI_SERVICE_URL') || 'http://ai-service:8000';
+    this.scaleMode = this.config.get<string>('SCALE_MODE') || 'PRO';
+    
+    if (this.scaleMode === 'PRO') {
+      this.aiBaseUrl = this.config.get<string>('AI_SERVICE_URL') || 'http://localhost:8000';
+      this.localRagService = null;
+    } else {
+      this.aiBaseUrl = '';
+      this.localRagService = localRagService;
+    }
   }
 
   async chat(companyId: string, dto: ChatDto) {
@@ -150,92 +162,6 @@ export class AiProxyService {
     }
   }
 
-  async syncRagData(companyId: string) {
-    const results = {
-      clients: 0,
-      pets: 0,
-      supplies: 0,
-      medicalRecords: 0,
-      company: null,
-    };
-
-    try {
-      const company = await this.prisma.company.findUnique({ where: { id: companyId } });
-      if (company) {
-        results.company = {
-          content: `Veterinaria: ${company.name}. Dirección: ${company.address || 'No especificada'}. Teléfono: ${company.phone || 'No especificado'}. Email: ${company.email || 'No especificado'}.`,
-          metadata: { source: 'company', type: 'company' }
-        };
-      }
-
-      const clients = await this.prisma.client.findMany({ where: { companyId } });
-      results.clients = clients.length;
-      if (clients.length > 0) {
-        const clientDocs = clients.map(c => ({
-          content: `Cliente: ${c.name}. DNI: ${c.dni || 'N/A'}. Email: ${c.email || 'N/A'}. Teléfono: ${c.phone || 'N/A'}. Dirección: ${c.address || 'N/A'}.`,
-          metadata: { source: 'client', clientId: c.id, name: c.name }
-        }));
-        await this.sendToRag(companyId, clientDocs);
-      }
-
-      const pets = await this.prisma.pet.findMany({ 
-        where: { companyId },
-        include: { client: true }
-      });
-      results.pets = pets.length;
-      if (pets.length > 0) {
-        const petDocs = pets.map(p => {
-          const ownerName = p.client?.name || 'N/A';
-          let ageText = 'N/A';
-          if (p.birthDate) {
-            const ageMs = Date.now() - p.birthDate.getTime();
-            ageText = Math.floor(ageMs / (365.25 * 24 * 60 * 60 * 1000)) + ' años';
-          }
-          return {
-            content: `Mascota: ${p.name}. Especie: ${p.species}. Raza: ${p.breed || 'N/A'}. Peso: ${p.weight || 'N/A'}kg. Edad: ${ageText}. Dueño: ${ownerName}. Notas: ${p.notes || 'Sin notas'}.`,
-            metadata: { source: 'pet', petId: p.id, name: p.name }
-          };
-        });
-        await this.sendToRag(companyId, petDocs);
-      }
-
-      const supplies = await this.prisma.supply.findMany({ where: { companyId } });
-      results.supplies = supplies.length;
-      if (supplies.length > 0) {
-        const supplyDocs = supplies.map(s => ({
-          content: `Insumo: ${s.name}. Marca: ${s.brand || 'N/A'}. Cantidad: ${s.quantity}. Unidad: ${s.unit || 'unidad'}. Precio: $${s.unitPrice}. Stock mínimo: ${s.minQuantity || 10}.`,
-          metadata: { source: 'supply', supplyId: s.id, name: s.name }
-        }));
-        await this.sendToRag(companyId, supplyDocs);
-      }
-
-      const medicalRecords = await this.prisma.medicalRecord.findMany({
-        where: { pet: { companyId } },
-        include: { pet: true },
-        take: 100,
-      });
-      results.medicalRecords = medicalRecords.length;
-      if (medicalRecords.length > 0) {
-        const recordDocs = medicalRecords.map(r => ({
-          content: `Historia médica de ${r.pet?.name || 'mascota'}. Fecha: ${r.date}. Motivo: ${r.visitReason}. Diagnóstico: ${r.diagnosis || 'N/A'}. Tratamiento: ${r.treatment || 'N/A'}. Observaciones: ${r.observations || 'Sin observaciones'}.`,
-          metadata: { source: 'medicalrecord', recordId: r.id, petId: r.petId, date: r.date }
-        }));
-        await this.sendToRag(companyId, recordDocs);
-      }
-
-      if (results.company) {
-        await this.sendToRag(companyId, [results.company]);
-      }
-
-      this.logger.log(`RAG sync completado para company ${companyId}: ${JSON.stringify(results)}`);
-      return { success: true, synced: results };
-
-    } catch (error) {
-      this.logger.error(`Error en syncRagData: ${error.message}`);
-      throw new InternalServerErrorException('Error al sincronizar datos con el RAG');
-    }
-  }
-
   async getRagStatus(companyId: string) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
@@ -261,7 +187,7 @@ export class AiProxyService {
     }
   }
 
-  async sendToRag(companyId: string, documents: any[]) {
+  async sendToRag(companyId: string, documents: Array<{ content: string; metadata: Record<string, any> }>) {
     try {
       await fetch(`${this.aiBaseUrl}/api/v1/rag/documents`, {
         method: 'POST',

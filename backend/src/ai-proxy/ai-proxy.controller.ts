@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, UseInterceptors, UploadedFile, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, UseInterceptors, UploadedFile, Param, Inject, forwardRef } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AiProxyService } from './ai-proxy.service';
@@ -9,6 +9,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BadRequestException } from '@nestjs/common';
 
+interface RequestUser {
+  companyId: string;
+  id: string;
+  email: string;
+  [key: string]: string | number | boolean | unknown;
+}
+
 @ApiTags('ai-proxy')
 @Controller('api/v1/ai')
 @UseGuards(JwtAuthGuard)
@@ -16,13 +23,14 @@ import { BadRequestException } from '@nestjs/common';
 export class AiProxyController {
   constructor(
     private readonly aiProxyService: AiProxyService,
+    @Inject(forwardRef(() => DocumentProcessorService))
     private readonly documentProcessor: DocumentProcessorService,
     private readonly ragIngestionService: RagIngestionService,
   ) {}
 
   @Post('chat')
   @ApiOperation({ summary: 'Proxy de chat con asistente IA' })
-  chat(@CurrentUser() user: any, @Body() dto: ChatDto) {
+  chat(@CurrentUser() user: RequestUser, @Body() dto: ChatDto) {
     return this.aiProxyService.chat(user.companyId, dto);
   }
 
@@ -70,13 +78,13 @@ export class AiProxyController {
 
   @Post('rag/sync')
   @ApiOperation({ summary: 'Sincronizar datos de la empresa al RAG' })
-  async syncRag(@CurrentUser() user: any) {
+  async syncRag(@CurrentUser() user: RequestUser) {
     return this.ragIngestionService.ingestCompanyData(user.companyId);
   }
 
   @Get('rag/status')
   @ApiOperation({ summary: 'Obtener estado del RAG de la empresa' })
-  getRagStatus(@CurrentUser() user: any) {
+  getRagStatus(@CurrentUser() user: RequestUser) {
     return this.aiProxyService.getRagStatus(user.companyId);
   }
 }

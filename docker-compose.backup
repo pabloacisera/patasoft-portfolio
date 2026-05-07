@@ -45,6 +45,7 @@ services:
     # Sin 'command' → usa CMD del Dockerfile (start.sh que compila y corre dist/)
     environment:
       NODE_ENV: production
+      IS_DOCKER: true
       PORT: 3000
       DATABASE_URL: postgresql://patasoft:patasoft_dev@postgres:5432/patasoft_db
       REDIS_URL: redis://redis:6379
