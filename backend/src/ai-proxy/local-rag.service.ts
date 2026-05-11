@@ -1,11 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { Chroma } from '@langchain/community/vectorstores/chroma';
+import { GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI } from '@langchain/google-genai';
 
 @Injectable()
-export class LocalRagService {
+export class LocalRagService implements OnModuleInit {
   private readonly logger = new Logger(LocalRagService.name);
-  private vectorStore: any = null;
+  private vectorStore: Chroma | null = null;
   private isInitialized = false;
 
   constructor(
@@ -15,20 +17,19 @@ export class LocalRagService {
 
   async onModuleInit() {
     try {
-      const { Chroma } = require('chromadb');
-      const { GoogleGenerativeAIEmbeddings } = require('@langchain/google-genai');
-      
       const embeddings = new GoogleGenerativeAIEmbeddings({
         apiKey: this.config.get('GEMINI_API_KEY') || process.env.GEMINI_API_KEY,
       });
 
-      this.vectorStore = new Chroma(embeddings, {
+      const chromaUrl = this.config.get('CHROMA_URL') || 'http://localhost:8000';
+      
+      this.vectorStore = await Chroma.fromExistingCollection(embeddings, {
         collectionName: 'local-rag',
-        url: this.config.get('CHROMA_URL') || 'http://localhost:8000',
+        url: chromaUrl,
       });
 
       this.isInitialized = true;
-      this.logger.log('✅ Local RAG service initialized (LangChain.js + Chroma)');
+      this.logger.log(`✅ Local RAG service initialized (LangChain.js + Chroma at ${chromaUrl})`);
     } catch (error) {
       this.logger.error(`❌ Local RAG initialization failed: ${error.message}`);
       this.isInitialized = false;
@@ -36,7 +37,7 @@ export class LocalRagService {
   }
 
   async addDocuments(companyId: string, documents: any[]) {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.vectorStore) {
       throw new Error('Local RAG not initialized');
     }
 
@@ -45,7 +46,7 @@ export class LocalRagService {
         pageContent: doc.content,
         metadata: {
           ...doc.metadata,
-          companyId, // CRITICAL: always enforce company_id
+          companyId, // CRITICAL: always enforce companyId
         },
       }));
 
@@ -59,13 +60,15 @@ export class LocalRagService {
   }
 
   async query(companyId: string, query: string, topK: number = 5) {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.vectorStore) {
       return { answer: 'Local RAG not available', sources: [] };
     }
 
     try {
-      // Search with company_id filter
-      const results = await this.vectorStore.similaritySearch(query, topK, (doc) => doc.metadata.companyId === companyId);
+      // Search with companyId filter using Chroma's metadata syntax
+      const results = await this.vectorStore.similaritySearch(query, topK, {
+        companyId: companyId,
+      });
 
       if (!results.length) {
         return { answer: 'No relevant documents found', sources: [] };
@@ -74,7 +77,6 @@ export class LocalRagService {
       const context = results.map(r => r.pageContent).join('\n\n');
       
       // Use Google Generative AI for response
-      const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
       const model = new ChatGoogleGenerativeAI({
         model: 'gemini-1.5-flash',
         apiKey: this.config.get('GEMINI_API_KEY'),

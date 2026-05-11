@@ -71,11 +71,11 @@ stop_service() {
         backend) pkill -9 -f "nest start" || pkill -9 -f "ts-node" ;;
         frontend) pkill -9 -f "vite" ;;
         tunnel) sudo pkill -9 cloudflared ;;
-        all) 
+        all)
             pkill -9 -f "uvicorn app.main:app"
             pkill -9 -f "nest start" || pkill -9 -f "ts-node"
             pkill -9 -f "vite"
-            sudo pkill -9 cloudflared 
+            sudo pkill -9 cloudflared
             ;;
     esac
 }
@@ -98,7 +98,7 @@ case "$1" in
         stop_service all
         ;;
     restart)
-        shift 
+        shift
         if [ -z "$1" ]; then
             $0 stop && $0 start
         else
@@ -127,3 +127,6 @@ case "$1" in
         echo -e "${YELLOW}Uso: $0 {start|stop|status|logs|restart [ai|backend|frontend|tunnel]}${NC}"
         exit 1
 esac
+
+
+# chroma run --host 127.0.0.1 --port 8000 --path ./chroma_data
