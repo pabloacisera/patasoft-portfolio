@@ -70,6 +70,24 @@ export function connect(token = null) {
     emit('debt:alert', data);
   });
 
+  socket.on('company:blocked', (data) => {
+    document.body.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;
+        justify-content:center;height:100vh;gap:16px;font-family:sans-serif;
+        background:#0f172a;color:white;">
+        <h2 style="color:#ef4444;font-size:24px;">Cuenta bloqueada</h2>
+        <p style="color:#94a3b8;text-align:center;max-width:400px;">
+          ${data?.reason || 'Tu suscripción ha vencido.'}
+        </p>
+        <a href="/settings/subscription" 
+           style="background:#6366f1;color:white;padding:12px 28px;
+           border-radius:8px;text-decoration:none;font-weight:600;">
+          Renovar suscripción
+        </a>
+      </div>
+    `;
+  });
+
   return socket;
 }
 

@@ -2,6 +2,8 @@
 // FUNCIONES DE CARGA DE DATOS FALTANTES
 // ============================================
 
+import { renderPagination } from '../components/Pagination.js';
+
 async function loadClientsData(page = 1, search = '') {
   try {
     const result = await api.get(`/clients?page=${page}&limit=20&search=${encodeURIComponent(search)}`);
@@ -67,7 +69,7 @@ async function loadDebtsData(page = 1, status = '') {
 async function loadSuppliesData(page = 1, search = '') {
   try {
     const result = await api.get(`/supplies?page=${page}&limit=20&search=${encodeURIComponent(search)}`);
-    pageData.supplies = { page, search, data: result.data, total: result.meta.total };
+    pageData.supplies = { ...result, page, search, data: result.data, meta: result.meta, total: result.meta?.total };
     return result;
   } catch (e) {
     console.error('[loadSuppliesData]', e);
@@ -622,17 +624,23 @@ async function renderSuppliesContent(content) {
 
   renderSuppliesTable(supplies);
   
-  if (meta?.total > 20) {
-    const pagination = createPagination({
-      total: meta.total,
-      page: meta.page,
-      limit: meta.limit,
-      onPageChange: async (newPage) => {
-        await loadSuppliesData(newPage, pageData.supplies?.search || '');
-        renderSuppliesTable(pageData.supplies?.data || []);
-      }
-    });
-    document.getElementById('supplies-pagination').appendChild(pagination);
+  const paginationEl = document.getElementById('supplies-pagination');
+  if (paginationEl && meta) {
+    const totalPages = meta.totalPages || Math.ceil((meta.total || 0) / (meta.limit || 20));
+    if (totalPages > 1) {
+      const pagination = renderPagination({
+        total: meta.total || 0,
+        page: meta.page || 1,
+        limit: meta.limit || 20,
+        onPageChange: async (newPage) => {
+          await loadSuppliesData(newPage, pageData.supplies?.search || '');
+          const content = document.getElementById('page-content');
+          if (content) await renderSuppliesContent(content);
+        }
+      });
+      paginationEl.innerHTML = '';
+      paginationEl.appendChild(pagination);
+    }
   }
 }
 

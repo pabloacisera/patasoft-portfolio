@@ -4,6 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export enum SubscriptionPlanDto {
   MONTHLY = 'MONTHLY',
   YEARLY = 'YEARLY',
+  TEST = 'TEST',
 }
 
 export class CreateSubscriptionCheckoutDto {

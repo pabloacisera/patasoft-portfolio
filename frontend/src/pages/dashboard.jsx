@@ -2987,7 +2987,8 @@ async function renderSettingsSubscriptionContent(content) {
         <div class="plan-card ${sub.plan === 'MONTHLY' && isActive ? 'current' : ''}">
           ${sub.plan === 'MONTHLY' && isActive ? '<div class="plan-badge-featured">Plan actual</div>' : ''}
           <div class="plan-name">Mensual</div>
-          <div class="plan-price">$5.000 <span>/ mes</span></div>
+          <div class="plan-price">$27.000 <span>/ mes</span></div>
+
           <ul class="plan-features">
             <li>Clientes y mascotas ilimitados</li>
             <li>Historiales clínicos completos</li>
@@ -3006,8 +3007,9 @@ async function renderSettingsSubscriptionContent(content) {
         <div class="plan-card featured ${sub.plan === 'YEARLY' && isActive ? 'current' : ''}">
           ${sub.plan === 'YEARLY' && isActive ? '<div class="plan-badge-featured">Plan actual</div>' : '<div class="plan-badge-featured">Recomendado</div>'}
           <div class="plan-name">Anual</div>
-          <div class="plan-price">$50.000 <span>/ año</span></div>
-          <div class="plan-saving">Ahorrás $10.000 vs mensual</div>
+          <div class="plan-price">$240.000 <span>/ año</span></div>
+          <div class="plan-saving">Ahorrás $84.000 vs mensual</div>
+
           <ul class="plan-features">
             <li>Todo lo del plan mensual</li>
             <li>2 meses gratis</li>
@@ -3020,6 +3022,13 @@ async function renderSettingsSubscriptionContent(content) {
                   id="btn-subscribe-yearly"
                   ${sub.plan === 'YEARLY' && isActive ? 'disabled' : ''}>
             ${sub.plan === 'YEARLY' && isActive ? 'Plan activo' : 'Suscribirme anual'}
+          </button>
+          <button
+            class="btn btn-outline btn-sm"
+            id="btn-subscribe-test"
+            style="margin-top: var(--space-4); opacity: 0.5; font-size: 11px;"
+          >
+            [TEST] $150 por 2 días
           </button>
         </div>
       </div>
@@ -3062,6 +3071,7 @@ async function renderSettingsSubscriptionContent(content) {
 
   document.getElementById('btn-subscribe-monthly')?.addEventListener('click', () => handleSubscribe('MONTHLY'));
   document.getElementById('btn-subscribe-yearly')?.addEventListener('click', () => handleSubscribe('YEARLY'));
+  document.getElementById('btn-subscribe-test')?.addEventListener('click', () => handleSubscribe('TEST'));
 
   document.getElementById('btn-cancel-subscription')?.addEventListener('click', async () => {
     const confirmed = await new Promise(resolve => {

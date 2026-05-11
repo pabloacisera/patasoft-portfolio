@@ -426,6 +426,7 @@ enum SubscriptionPlan {
   TRIAL
   MONTHLY
   YEARLY
+  TEST
 }
 
 enum SubscriptionStatus {

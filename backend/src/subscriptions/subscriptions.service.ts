@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, forwardRef, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSubscriptionCheckoutDto, SubscriptionPlanDto } from './dto/subscriptions.dto';
+import { EventsGateway } from '../events/events.gateway';
 
 const MP_BASE_URL = 'https://api.mercadopago.com';
 
@@ -12,6 +13,8 @@ export class SubscriptionsService {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    @Inject(forwardRef(() => EventsGateway))
+    private eventsGateway: EventsGateway,
   ) {}
 
   async getStatus(companyId: string) {
@@ -35,8 +38,17 @@ export class SubscriptionsService {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw new NotFoundException('Empresa no encontrada');
 
-    const amount = dto.plan === SubscriptionPlanDto.MONTHLY ? 5000 : 50000; // Precios de ejemplo
-    const title = `Suscripción PataSoft - ${dto.plan === SubscriptionPlanDto.MONTHLY ? 'Mensual' : 'Anual'}`;
+    let amount: number;
+    let title: string;
+    if ((dto.plan as string) === 'TEST') {
+      amount = 150;
+      title = 'Suscripción PataSoft - TEST 2 días';
+    } else {
+      amount = dto.plan === SubscriptionPlanDto.MONTHLY
+        ? Number(this.config.get('MP_PLAN_MONTHLY_PRICE'))
+        : Number(this.config.get('MP_PLAN_YEARLY_PRICE'));
+      title = `Suscripción PataSoft - ${dto.plan === SubscriptionPlanDto.MONTHLY ? 'Mensual' : 'Anual'}`;
+    }
 
     const preference = {
       items: [
@@ -50,8 +62,9 @@ export class SubscriptionsService {
       external_reference: JSON.stringify({ type: 'subscription', companyId, plan: dto.plan }),
       notification_url: `${this.config.get('BACKEND_URL')}/api/v1/subscriptions/webhook`,
       back_urls: {
-        success: `${this.config.get('FRONTEND_URL')}/settings/subscription?success=true`,
-        failure: `${this.config.get('FRONTEND_URL')}/settings/subscription?error=true`,
+        success: this.config.get('MP_SUCCESS_URL'),
+        failure: this.config.get('MP_FAILURE_URL'),
+        pending: this.config.get('MP_PENDING_URL'),
       },
       auto_return: 'approved',
     };
@@ -68,7 +81,7 @@ export class SubscriptionsService {
     if (!response.ok) {
       const error = await response.text();
       this.logger.error(`Error creating subscription preference: ${error}`);
-      throw new BadRequestException('Error al crear preferencia de suscripción');
+      throw new BadRequestException(`Error MP: ${error}`);
     }
 
     const result = await response.json();
@@ -84,8 +97,9 @@ export class SubscriptionsService {
     // TODO: implementar validación de x-signature si es necesario
     
     const mpAccessToken = this.config.get('MP_ACCESS_TOKEN');
-    if (data.type === 'payment' && data.data?.id) {
-      const response = await fetch(`${MP_BASE_URL}/v1/payments/${data.data.id}`, {
+    const paymentId = data.data?.id || (data.topic === 'payment' ? data.resource : null);
+    if ((data.type === 'payment' || data.topic === 'payment') && paymentId && !String(paymentId).startsWith('http')) {
+      const response = await fetch(`${MP_BASE_URL}/v1/payments/${paymentId}`, {
         headers: { Authorization: `Bearer ${mpAccessToken}` },
       });
 
@@ -94,8 +108,8 @@ export class SubscriptionsService {
         const externalRef = paymentData.external_reference;
         
         try {
-          const parsed = JSON.parse(externalRef);
-          if (parsed.type === 'subscription') {
+          const parsed = typeof externalRef === 'string' ? JSON.parse(externalRef) : externalRef;
+          if (parsed?.type === 'subscription') {
             const { companyId, plan } = parsed;
             
             if (paymentData.status === 'approved') {
@@ -103,7 +117,8 @@ export class SubscriptionsService {
             }
           }
         } catch (e) {
-          this.logger.error(`Error parsing external_reference: ${externalRef}`);
+          this.logger.error(`Error processing webhook payment ${paymentId}: ${e.message}`);
+          if (e.stack) this.logger.debug(e.stack);
         }
       }
     }
@@ -113,16 +128,34 @@ export class SubscriptionsService {
 
   private async activateSubscription(companyId: string, plan: SubscriptionPlanDto) {
     const expiresAt = new Date();
-    if (plan === SubscriptionPlanDto.MONTHLY) {
+    if ((plan as string) === 'TEST') {
+      expiresAt.setDate(expiresAt.getDate() + 2);
+    } else if (plan === SubscriptionPlanDto.MONTHLY) {
       expiresAt.setMonth(expiresAt.getMonth() + 1);
     } else {
       expiresAt.setFullYear(expiresAt.getFullYear() + 1);
     }
 
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      include: { subscription: true }
+    });
+
+    if (!company) {
+      this.logger.error(`Cannot activate subscription: Company ${companyId} not found`);
+      return;
+    }
+
     await this.prisma.$transaction([
-      this.prisma.subscription.update({
+      this.prisma.subscription.upsert({
         where: { companyId },
-        data: {
+        create: {
+          companyId,
+          plan: plan as any,
+          status: 'ACTIVE',
+          expiresAt,
+        },
+        update: {
           plan: plan as any,
           status: 'ACTIVE',
           expiresAt,
@@ -188,6 +221,11 @@ export class SubscriptionsService {
         }),
       ]);
       this.logger.warn(`Subscription expired for company ${sub.companyId}`);
+      try {
+        this.eventsGateway.emitToCompany(sub.companyId, 'company:blocked', {
+          reason: sub.status === 'TRIAL' ? 'Trial expirado' : 'Suscripción expirada',
+        });
+      } catch(e) {}
     }
   }
 }

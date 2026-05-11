@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Headers, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Headers, UseGuards, HttpCode, HttpStatus, Query, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionCheckoutDto } from './dto/subscriptions.dto';
@@ -24,6 +24,22 @@ export class SubscriptionsController {
   @ApiOperation({ summary: 'Iniciar checkout de suscripción con MercadoPago' })
   createCheckout(@CurrentUser() user: any, @Body() dto: CreateSubscriptionCheckoutDto) {
     return this.subscriptionsService.createCheckout(user.companyId, dto);
+  }
+
+  @Get('success')
+  @HttpCode(HttpStatus.OK)
+  handleSuccess(@Query() query: any, @Res() res: any) {
+    return res.redirect(`http://localhost:5173/settings/subscription?status=success`);
+  }
+
+  @Get('failure')
+  handleFailure(@Query() query: any, @Res() res: any) {
+    return res.redirect(`http://localhost:5173/settings/subscription?status=failure`);
+  }
+
+  @Get('pending')
+  handlePending(@Query() query: any, @Res() res: any) {
+    return res.redirect(`http://localhost:5173/settings/subscription?status=pending`);
   }
 
   @Post('webhook')

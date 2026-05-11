@@ -27,7 +27,25 @@ router.register('/dashboard/connections', { render: () => import('./pages/dashbo
 router.register('/dashboard/documents', { render: () => import('./pages/dashboard.jsx').then(m => m.renderDocuments()) });
 router.register('/settings', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettings()) });
 router.register('/settings/company', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsCompany()) });
-router.register('/settings/subscription', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsSubscription()) });
+router.register('/settings/subscription', { 
+  render: async () => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    if (status === 'success') {
+      // Limpiar la URL sin recargar
+      window.history.replaceState({}, '', '/settings/subscription');
+      // Mostrar toast o banner de éxito
+      setTimeout(() => {
+        const toast = document.createElement('div');
+        toast.style = 'position:fixed;top:24px;right:24px;background:#22c55e;color:white;padding:16px 24px;border-radius:8px;font-weight:600;z-index:9999;';
+        toast.textContent = '✓ Suscripción activada exitosamente';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+      }, 500);
+    }
+    return import('./pages/dashboard.jsx').then(m => m.renderSettingsSubscription());
+  }
+});
 router.register('/settings/mercadopago', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsMercadoPago()) });
 router.register('/settings/prices', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsPrices()) });
 router.register('/settings/ai', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsAI()) });
@@ -76,6 +94,31 @@ async function initApp() {
   if (token && refresh) {
     api.setToken(token, refresh);
     window.history.replaceState({}, '', pathname);
+  }
+
+  // Verificar bloqueo al cargar
+  if (isAuthenticated()) {
+    try {
+      const company = await api.get('/companies/me');
+      if (company?.isBlocked) {
+        document.body.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;
+            justify-content:center;height:100vh;gap:16px;font-family:sans-serif;
+            background:#0f172a;color:white;">
+            <h2 style="color:#ef4444;font-size:24px;">Cuenta bloqueada</h2>
+            <p style="color:#94a3b8;text-align:center;max-width:400px;">
+              ${company.blockedReason || 'Tu suscripción ha vencido.'}
+            </p>
+            <a href="/settings/subscription"
+               style="background:#6366f1;color:white;padding:12px 28px;
+               border-radius:8px;text-decoration:none;font-weight:600;">
+              Renovar suscripción
+            </a>
+          </div>
+        `;
+        return;
+      }
+    } catch(e) {}
   }
 
   if (!checkAuth(pathname)) {
