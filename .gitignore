@@ -70,3 +70,4 @@ Thumbs.db
 # --- Específicos del Proyecto ---
 /agent
 /errors.txt
+.env.example

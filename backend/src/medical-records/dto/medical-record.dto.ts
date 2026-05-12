@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsUUID, IsDateString, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsUUID, IsDateString, IsArray, ValidateNested, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -147,6 +147,31 @@ export class CreateMedicalRecordDto {
   @ValidateNested({ each: true })
   @Type(() => PrescriptionDto)
   prescriptions?: PrescriptionDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  totalAmount?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(['CASH', 'TRANSFER', 'MP_QR', 'MP_CHECKOUT', 'CHECK', 'OTHER'])
+  paymentMethod?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEnum(['PENDING', 'PARTIAL', 'PAID', 'DEFERRED'])
+  paymentStatus?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  paymentDueDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  paymentNotes?: string;
 }
 
 export class UpdateMedicalRecordDto {

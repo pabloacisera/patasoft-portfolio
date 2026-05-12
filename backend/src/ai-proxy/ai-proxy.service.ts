@@ -32,15 +32,22 @@ export class AiProxyService {
       where: { companyId },
       include: { company: true },
     });
-
     if (!config) throw new NotFoundException('Configuración de empresa no encontrada');
+
+    if (this.scaleMode !== 'PRO') {
+      if (!this.localRagService) throw new InternalServerErrorException('Servicio de IA local no disponible');
+      try {
+        return await this.localRagService.query(companyId, dto.message, dto.history || []);
+      } catch (error) {
+        this.logger.error(`Local chat error: ${error.message}`);
+        throw new InternalServerErrorException('Error en el servicio de IA');
+      }
+    }
 
     const messages = [];
     if (dto.history && Array.isArray(dto.history)) {
       for (const h of dto.history) {
-        if (h.role && h.content) {
-          messages.push({ role: h.role, content: h.content });
-        }
+        if (h.role && h.content) messages.push({ role: h.role, content: h.content });
       }
     }
     messages.push({ role: 'user', content: dto.message });
@@ -61,13 +68,11 @@ export class AiProxyService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       if (!response.ok) {
         const err = await response.text();
         this.logger.error(`AI Service Chat Error: ${err}`);
         throw new InternalServerErrorException('Error en el servicio de IA');
       }
-
       return await response.json();
     } catch (error) {
       this.logger.error(`AI Proxy connection error: ${error.message}`);
@@ -115,46 +120,31 @@ export class AiProxyService {
 
   async uploadRag(companyId: string, file: Express.Multer.File) {
     const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new InternalServerErrorException('El archivo supera el límite de 10MB');
+    if (file.size > maxSize) throw new InternalServerErrorException('El archivo supera el límite de 10MB');
+
+    const allowedTypes = ['application/pdf', 'text/plain'];
+    if (!allowedTypes.includes(file.mimetype)) {
+      throw new InternalServerErrorException('Tipo de archivo no permitido. Se aceptan PDF y TXT');
     }
 
-    const allowedTypes = ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.mimetype) && !file.originalname.match(/\.(xlsx?|csv)$/)) {
-      throw new InternalServerErrorException('Tipo de archivo no permitido. Se aceptan PDF, TXT, Excel e imágenes');
-    }
+    const content = file.buffer.toString('utf-8');
+    const documents = [{
+      content,
+      metadata: { source: 'upload', filename: file.originalname, uploadedAt: new Date().toISOString() }
+    }];
 
-    let content: string;
-    if (file.mimetype === 'text/plain') {
-      content = file.buffer.toString('utf-8');
-    } else {
-      content = `[Documento: ${file.originalname} - Tipo: ${file.mimetype}]`;
+    if (this.scaleMode !== 'PRO') {
+      if (!this.localRagService) throw new InternalServerErrorException('Servicio RAG local no disponible');
+      return await this.localRagService.addDocuments(companyId, documents);
     }
 
     try {
       const response = await fetch(`${this.aiBaseUrl}/api/v1/rag/documents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyId,
-          documents: [{
-            content,
-            metadata: {
-              source: 'upload',
-              filename: file.originalname,
-              type: file.mimetype,
-              uploadedAt: new Date().toISOString(),
-            }
-          }]
-        }),
+        body: JSON.stringify({ companyId, documents }),
       });
-
-      if (!response.ok) {
-        const err = await response.text();
-        this.logger.error(`RAG Upload Error: ${err}`);
-        throw new InternalServerErrorException('Error al procesar documento');
-      }
-
+      if (!response.ok) throw new InternalServerErrorException('Error al procesar documento');
       return await response.json();
     } catch (error) {
       this.logger.error(`RAG upload error: ${error.message}`);
@@ -167,28 +157,32 @@ export class AiProxyService {
       where: { id: companyId },
       select: { id: true, name: true },
     });
+    if (!company) return { synced: false, documentsCount: 0 };
 
-    if (!company) {
-      this.logger.warn(`RAG status: Empresa no encontrada ${companyId}`);
-      return { synced: false, documentsCount: 0, message: 'Empresa no encontrada' };
+    if (this.scaleMode !== 'PRO') {
+      return { synced: true, documentsCount: 0, company: company.name, mode: 'local' };
     }
 
     try {
       const response = await fetch(`${this.aiBaseUrl}/api/v1/rag/status/${companyId}`);
-      if (!response.ok) {
-        this.logger.warn(`RAG service returned ${response.status} for company ${companyId}`);
-        return { synced: false, documentsCount: 0, company: company.name };
-      }
-      const result = await response.json();
-      return result;
+      if (!response.ok) return { synced: false, documentsCount: 0, company: company.name };
+      return await response.json();
     } catch (error) {
       this.logger.error(`RAG status error: ${error.message}`);
       return { synced: false, documentsCount: 0, error: error.message };
     }
   }
 
-  async sendToRag(companyId: string, documents: Array<{ content: string; metadata: Record<string, any> }>) {
+  async sendToRag(companyId: string, documents: Array<{ content: string; metadata: Record<string, any> }>, progressCallback?: (data: any) => void) {
     try {
+      if (this.scaleMode !== 'PRO') {
+        if (this.localRagService) {
+          await this.localRagService.addDocuments(companyId, documents, (progress) => {
+            progressCallback?.(progress);
+          });
+        }
+        return;
+      }
       await fetch(`${this.aiBaseUrl}/api/v1/rag/documents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

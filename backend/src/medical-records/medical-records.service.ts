@@ -89,53 +89,56 @@ export class MedicalRecordsService {
     });
     if (!pet) throw new NotFoundException('Mascota no encontrada');
 
-    // Calcular items del pago
+    // Calcular items del pago (si vienen del frontend, usar esos; sino calcular)
+    let totalAmount = dto.totalAmount || 0;
+    
     const paymentItems = [];
-    let totalAmount = 0;
-
-    // Procedures → buscar precio en PriceItem o customPrice
-    for (const proc of (dto.procedures || [])) {
-      let unitPrice = proc.customPrice || 0;
-      if (proc.priceItemId && !proc.customPrice) {
-        const pi = await this.prisma.priceItem.findUnique({ where: { id: proc.priceItemId } });
-        unitPrice = pi?.price || 0;
-      }
-      if (proc.supplyId) {
-        const supply = await this.prisma.supply.findUnique({ where: { id: proc.supplyId } });
-        if (supply?.salePrice && supply?.unitsPerStock) {
-          unitPrice = supply.salePrice / supply.unitsPerStock;
+    
+    if (dto.totalAmount !== undefined && dto.totalAmount > 0) {
+      totalAmount = dto.totalAmount;
+    } else {
+      for (const proc of (dto.procedures || [])) {
+        let unitPrice = proc.customPrice || 0;
+        if (proc.priceItemId && !proc.customPrice) {
+          const pi = await this.prisma.priceItem.findUnique({ where: { id: proc.priceItemId } });
+          unitPrice = pi?.price || 0;
+        }
+        if (proc.supplyId) {
+          const supply = await this.prisma.supply.findUnique({ where: { id: proc.supplyId } });
+          if (supply?.salePrice && supply?.unitsPerStock) {
+            unitPrice = supply.salePrice / supply.unitsPerStock;
+          }
+        }
+        const qty = proc.quantity || 1;
+        const total = unitPrice * qty;
+        totalAmount += total;
+        if (unitPrice > 0) {
+          paymentItems.push({
+            description: proc.name,
+            quantity: qty,
+            unitPrice,
+            totalPrice: total,
+            itemType: proc.supplyId ? 'SUPPLY' : 'PROCEDURE',
+          });
         }
       }
-      const qty = proc.quantity || 1;
-      const total = unitPrice * qty;
-      totalAmount += total;
-      if (unitPrice > 0) {
+      
+      for (const pres of (dto.prescriptions || [])) {
+        if (!pres.soldInClinic || !pres.supplyId) continue;
+        const supply = await this.prisma.supply.findUnique({ where: { id: pres.supplyId } });
+        if (!supply) continue;
+        const unitIndividual = supply.unitsPerStock ? (supply.salePrice || 0) / supply.unitsPerStock : (supply.salePrice || 0);
+        const qty = pres.dispensingQuantity || pres.quantity || 1;
+        const total = unitIndividual * qty;
+        totalAmount += total;
         paymentItems.push({
-          description: proc.name,
+          description: `${supply.name} (${qty} ${supply.dispensingUnit || 'u.'})`,
           quantity: qty,
-          unitPrice,
+          unitPrice: unitIndividual,
           totalPrice: total,
-          itemType: proc.supplyId ? 'SUPPLY' : 'PROCEDURE',
+          itemType: 'SUPPLY',
         });
       }
-    }
-
-    // Prescriptions vendidas en clínica
-    for (const pres of (dto.prescriptions || [])) {
-      if (!pres.soldInClinic || !pres.supplyId) continue;
-      const supply = await this.prisma.supply.findUnique({ where: { id: pres.supplyId } });
-      if (!supply) continue;
-      const unitIndividual = supply.unitsPerStock ? (supply.salePrice || 0) / supply.unitsPerStock : (supply.salePrice || 0);
-      const qty = pres.dispensingQuantity || pres.quantity || 1;
-      const total = unitIndividual * qty;
-      totalAmount += total;
-      paymentItems.push({
-        description: `${supply.name} (${qty} ${supply.dispensingUnit || 'u.'})`,
-        quantity: qty,
-        unitPrice: unitIndividual,
-        totalPrice: total,
-        itemType: 'SUPPLY',
-      });
     }
 
     // Transacción atómica
@@ -212,17 +215,29 @@ export class MedicalRecordsService {
         });
       }
 
-      // 4. Crear Payment PENDING
+      // 4. Crear Payment
+      const paymentData: any = {
+        companyId,
+        clientId: pet.clientId || null,
+        petId: pet.id,
+        medicalRecordId: record.id,
+        totalAmount,
+        status: dto.paymentStatus || 'PENDING',
+        items: { create: paymentItems },
+      };
+      
+      if (dto.paymentMethod) {
+        paymentData.method = dto.paymentMethod;
+      }
+      if (dto.paymentDueDate) {
+        paymentData.dueDate = new Date(dto.paymentDueDate);
+      }
+      if (dto.paymentNotes) {
+        paymentData.notes = dto.paymentNotes;
+      }
+      
       const payment = await tx.payment.create({
-        data: {
-          companyId,
-          clientId: pet.clientId || null,
-          petId: pet.id,
-          medicalRecordId: record.id,
-          totalAmount,
-          status: 'PENDING',
-          items: { create: paymentItems },
-        },
+        data: paymentData,
         include: { items: true },
       });
 

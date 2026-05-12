@@ -1,8 +1,10 @@
 import os
+import json
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, AsyncGenerator
 
 load_dotenv()
 
@@ -206,6 +208,73 @@ async def chat(request: ChatRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def build_chat_messages(request: ChatRequest) -> tuple:
+    from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+    from app.memory import get_company_memory
+
+    memory = get_company_memory(request.company_id)
+    history_messages = memory.get_history(request.session_id)
+    history_str = ""
+    for msg in history_messages:
+        role = "Usuario" if isinstance(msg, HumanMessage) else "Asistente"
+        history_str += f"{role}: {msg.content}\n"
+
+    system_prompt = get_system_prompt(
+        specialties=request.specialties,
+        company_name=request.company_name,
+        company_address=request.company_address,
+        history=history_str,
+        user_input=request.messages[-1].content if request.messages else "",
+    )
+
+    chat_messages = [SystemMessage(content=system_prompt)]
+    for msg in request.messages[:-1]:
+        if msg.role == "user":
+            chat_messages.append(HumanMessage(content=msg.content))
+        elif msg.role == "assistant":
+            chat_messages.append(AIMessage(content=msg.content))
+
+    last_message = request.messages[-1].content if request.messages else ""
+    if last_message:
+        chat_messages.append(HumanMessage(content=last_message))
+
+    return chat_messages, last_message
+
+
+@router.post("/stream")
+async def chat_stream(request: ChatRequest):
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            from langchain_core.messages import HumanMessage
+            from app.memory import get_company_memory
+
+            llm = get_llm(request.model)
+            chat_messages, last_message = await build_chat_messages(request)
+
+            stream = llm.stream(chat_messages)
+            full_response = ""
+
+            for chunk in stream:
+                if hasattr(chunk, 'content') and chunk.content:
+                    full_response += chunk.content
+                    yield f"data: {json.dumps({'content': chunk.content})}\n\n"
+
+            yield f"data: {json.dumps({'done': True, 'full': full_response})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.get("/models")

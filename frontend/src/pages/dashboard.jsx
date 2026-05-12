@@ -2529,6 +2529,21 @@ async function renderSuppliesPage(content) {
     listEl.innerHTML = '<div class="empty-state"><p>No hay insumos</p></div>';
   }
   
+  const paginationEl = document.getElementById('supplies-pagination');
+  if (paginationEl && data.meta?.totalPages > 1) {
+    paginationEl.innerHTML = '';
+    const pagination = createPagination({
+      total: data.meta.total,
+      page: data.page || 1,
+      limit: 20,
+      onPageChange: async (newPage) => {
+        await loadSuppliesData(newPage, pageData.supplies?.search || '');
+        renderSuppliesPage(document.getElementById('page-content'));
+      }
+    });
+    paginationEl.appendChild(pagination);
+  }
+  
   document.getElementById('add-supply-btn')?.addEventListener('click', showAddSupplyModal);
 }
 
