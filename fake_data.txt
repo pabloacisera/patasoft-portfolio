@@ -1,0 +1,252 @@
+CLIENTES
+Cliente 1
+
+Nombre: Martín / Apellido: Fernández
+DNI: 28.541.320 / Tel: 11-4523-7891
+Email: martin.fernandez@gmail.com
+Dirección: Av. Corrientes 2341, CABA
+
+Cliente 2
+
+Nombre: Valentina / Apellido: Ríos
+DNI: 35.218.904 / Tel: 11-6734-2019
+Email: vale.rios@hotmail.com
+Dirección: Mitre 890, San Justo
+
+Cliente 3
+
+Nombre: Roberto / Apellido: Castillo
+DNI: 22.877.451 / Tel: 11-5091-3847
+Email: rcastillo@yahoo.com.ar
+Dirección: San Martín 123, La Matanza
+
+
+🐾 MASCOTAS
+Mascotas de Martín Fernández
+Mascota 1 — Zeus
+
+Especie: Perro / Raza: Labrador Retriever
+Género: Macho / Nacimiento: 15/03/2020
+Peso: 32kg / Color: Amarillo
+
+Mascota 2 — Luna
+
+Especie: Perra / Raza: Beagle
+Género: Hembra / Nacimiento: 22/07/2021
+Peso: 11kg / Color: Tricolor
+
+
+Mascotas de Valentina Ríos
+Mascota 3 — Copito
+
+Especie: Perro / Raza: Caniche
+Género: Macho / Nacimiento: 18/04/2021
+Peso: 5.2kg / Color: Blanco
+
+Mascota 4 — Mochi
+
+Especie: Gato / Raza: Maine Coon
+Género: Hembra / Nacimiento: 30/09/2020
+Peso: 6.1kg / Color: Gris atigrado
+
+
+Mascotas de Roberto Castillo
+Mascota 5 — Negra
+
+Especie: Perra / Raza: Mestizo
+Género: Hembra / Nacimiento: 28/02/2018
+Peso: 18kg / Color: Negro
+
+Mascota 6 — Whisky
+
+Especie: Gato / Raza: Siamés
+Género: Macho / Nacimiento: 03/12/2021
+Peso: 4.2kg / Color: Crema con puntos marrones
+
+
+🏥 CONSULTAS
+
+Consulta 1 — Zeus (Martín Fernández)
+Fecha: 10/03/2025 | Motivo: Control anual y vacunación
+
+Diagnóstico: Paciente clínicamente sano. Buen estado corporal.
+Tratamiento: Vacunación séxtuple canina. Desparasitación interna preventiva.
+Peso: 32kg / Temperatura: 38.4°C
+Próxima visita: 10/03/2026
+
+Procedimientos:
+
+Consulta general → $8.500
+Vacuna séxtuple canina → $9.000
+
+Prescripciones:
+
+Praziquantel 50mg / 1 comprimido / dosis única / 1 día / ✅ Vender en clínica
+
+Cobro: Efectivo / Pagado
+
+Consulta 2 — Zeus (Martín Fernández)
+Fecha: 02/05/2025 | Motivo: Cojera miembro posterior derecho
+
+Diagnóstico: Distensión ligamentaria leve. Sin fractura en Rx.
+Tratamiento: Antiinflamatorio oral 5 días. Reposo relativo.
+Peso: 31.5kg / Temperatura: 38.7°C
+Próxima visita: 09/05/2025
+
+Procedimientos:
+
+Consulta general → $8.500
+Radiografía → $18.000
+
+Prescripciones:
+
+Meloxicam 1mg/ml / 0.1mg por kg / 1ml / una vez al día / 5 días / ❌ No vender
+
+Cobro: Transferencia / Pagado
+
+Consulta 3 — Luna (Martín Fernández)
+Fecha: 15/01/2025 | Motivo: Vómitos y diarrea hace 2 días
+
+Diagnóstico: Gastroenteritis aguda leve. Sin deshidratación.
+Tratamiento: Antibiótico oral, dieta blanda 48hs, ayuno hídrico 6hs.
+Peso: 10.8kg / Temperatura: 39.1°C
+
+Procedimientos:
+
+Consulta de urgencia → $15.000
+Hemograma completo → $11.000
+
+Prescripciones:
+
+Amoxicilina 500mg / 250mg / 0.5 comprimido / cada 12 horas / 7 días / ✅ Vender en clínica
+Metronidazol 250mg / 1 comprimido / cada 8 horas / 5 días / ❌ No vender
+
+Cobro: Efectivo / Pagado
+
+Consulta 4 — Luna (Martín Fernández)
+Fecha: 20/04/2025 | Motivo: Control post-enfermedad + vacuna antirrábica
+
+Diagnóstico: Paciente recuperada. Excelente estado general.
+Tratamiento: Vacunación antirrábica anual.
+Peso: 11kg / Temperatura: 38.5°C
+Próxima visita: 20/04/2026
+
+Procedimientos:
+
+Consulta general → $8.500
+Vacuna antirrábica → $6.500
+
+Insumos a cobrar:
+
+Collar antipulgas Seresto / cantidad: 1 / $9.800
+
+Cobro: MercadoPago QR / Pagado
+
+Consulta 5 — Copito (Valentina Ríos)
+Fecha: 05/02/2025 | Motivo: Castración programada
+
+Diagnóstico: Paciente apto para cirugía. Prequirúrgico sin hallazgos.
+Tratamiento: Castración bajo anestesia general. Recuperación sin complicaciones.
+Peso: 5.2kg / Temperatura: 38.6°C
+Próxima visita: 12/02/2025
+
+Procedimientos:
+
+Consulta general → $8.500
+Castración macho canino → $35.000
+Hemograma completo → $11.000
+
+Prescripciones:
+
+Amoxicilina 500mg / 250mg / 0.5 comprimido / cada 12 horas / 7 días / ✅ Vender en clínica
+Meloxicam 1mg/ml / 0.05mg/kg / 0.5ml / una vez al día / 3 días / ✅ Vender en clínica
+
+Cobro: Transferencia / Pendiente
+
+Consulta 6 — Copito (Valentina Ríos)
+Fecha: 28/04/2025 | Motivo: Retiro de puntos y control post-operatorio
+
+Diagnóstico: Cicatrización completa. Sin signos de infección.
+Tratamiento: Retiro de puntos. Alta definitiva.
+Peso: 5.4kg / Temperatura: 38.3°C
+
+Procedimientos:
+
+Consulta general → $8.500
+
+Cobro: Efectivo / Pagado
+
+Consulta 7 — Mochi (Valentina Ríos)
+Fecha: 12/03/2025 | Motivo: Estornudos frecuentes y secreción nasal serosa
+
+Diagnóstico: Rinotraqueítis viral felina leve.
+Tratamiento: Antibiótico oral, limpieza nasal con suero. Control en 5 días.
+Peso: 5.9kg / Temperatura: 39.4°C
+
+Procedimientos:
+
+Consulta general → $8.500
+Vacuna triple felina → $8.000
+
+Prescripciones:
+
+Amoxicilina 500mg / 62.5mg / 0.5 comprimido / cada 12 horas / 7 días / ✅ Vender en clínica
+Dexametasona 4mg / 0.1mg/kg SC / dosis única / 1 día / ❌ No vender
+
+Cobro: Efectivo / Pagado
+
+Consulta 8 — Mochi (Valentina Ríos)
+Fecha: 01/05/2025 | Motivo: Control anual + ecografía preventiva
+
+Diagnóstico: Paciente sana. Ecografía abdominal sin hallazgos relevantes.
+Tratamiento: Sin medicación. Próximo control en 1 año.
+Peso: 6.1kg / Temperatura: 38.2°C
+Próxima visita: 01/05/2026
+
+Procedimientos:
+
+Consulta general → $8.500
+Ecografía abdominal → $22.000
+
+Cobro: Transferencia / Pagado
+
+Consulta 9 — Negra (Roberto Castillo)
+Fecha: 18/02/2025 | Motivo: Masa en región mamaria
+
+Diagnóstico: Nódulo mamario sospechoso. Se recomienda biopsia.
+Tratamiento: Extracción quirúrgica y envío a anatomía patológica pendiente.
+Peso: 17.5kg / Temperatura: 38.9°C
+
+Procedimientos:
+
+Consulta general → $8.500
+Hemograma completo → $11.000
+Bioquímica sanguínea → $14.000
+Ecografía abdominal → $22.000
+
+Prescripciones:
+
+Amoxicilina 500mg / 500mg / 1 comprimido / cada 12 horas / 10 días / ✅ Vender en clínica
+
+Cobro: Efectivo / Pendiente
+
+Consulta 10 — Whisky (Roberto Castillo)
+Fecha: 07/05/2025 | Motivo: No come hace 3 días, letargia
+
+Diagnóstico: Lipidosis hepática incipiente. Requiere soporte nutricional.
+Tratamiento: Internación 2 días, fluidoterapia IV, estimulación del apetito.
+Peso: 3.8kg / Temperatura: 37.8°C
+Próxima visita: 14/05/2025
+
+Procedimientos:
+
+Consulta de urgencia → $15.000
+Hemograma completo → $11.000
+Bioquímica sanguínea → $14.000
+Internación (por día) x2 → $40.000
+
+Insumos a cobrar:
+
+Suero fisiológico 500ml / cantidad: 2 / $2.800 c/u
+
+Cobro: Transferencia / Diferido
