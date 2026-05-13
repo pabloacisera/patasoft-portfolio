@@ -5,6 +5,7 @@ import { PriceItemsService } from './price-items.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { EventsModule } from '../events/events.module';
+import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { EventsModule } from '../events/events.module';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
+    AiProxyModule,
   ],
   controllers: [PriceItemsController],
   providers: [PriceItemsService],

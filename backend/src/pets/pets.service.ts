@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { CreatePetDto, UpdatePetDto } from './dto/pet.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
@@ -10,6 +11,7 @@ export class PetsService {
   constructor(
     private prisma: PrismaService,
     private cloudinary: CloudinaryService,
+    private rag: LocalRagService,
   ) {}
 
   async findAll(companyId: string, pagination: { page?: number; limit?: number; search?: string; species?: string } = {}) {
@@ -86,6 +88,17 @@ export class PetsService {
       include: { client: true, photos: true },
     });
 
+    const ownerName = pet.client?.name || 'N/A';
+    let ageText = 'N/A';
+    if (pet.birthDate) {
+      const ageMs = Date.now() - pet.birthDate.getTime();
+      ageText = Math.floor(ageMs / (365.25 * 24 * 60 * 60 * 1000)) + ' años';
+    }
+    this.rag.upsertEmbedding(companyId,
+      `Mascota ${pet.name} | especie ${pet.species} | raza ${pet.breed || 'ND'} | peso ${pet.weight || 'ND'}kg | edad ${ageText} | dueño ${ownerName} | notas ${pet.notes || 'sin notas'}`,
+      { source: 'pet', petId: pet.id, name: pet.name }
+    );
+
     this.logger.log(`Mascota creada: ${pet.name} (${pet.id})`);
     return pet;
   }
@@ -93,7 +106,7 @@ export class PetsService {
   async update(id: string, companyId: string, dto: UpdatePetDto) {
     await this.findOne(id, companyId);
 
-    return this.prisma.pet.update({
+    const pet = await this.prisma.pet.update({
       where: { id },
       data: {
         ...(dto.name && { name: dto.name }),
@@ -110,6 +123,19 @@ export class PetsService {
       },
       include: { client: true, photos: true },
     });
+
+    const ownerName = pet.client?.name || 'N/A';
+    let ageText = 'N/A';
+    if (pet.birthDate) {
+      const ageMs = Date.now() - pet.birthDate.getTime();
+      ageText = Math.floor(ageMs / (365.25 * 24 * 60 * 60 * 1000)) + ' años';
+    }
+    this.rag.upsertEmbedding(companyId,
+      `Mascota ${pet.name} | especie ${pet.species} | raza ${pet.breed || 'ND'} | peso ${pet.weight || 'ND'}kg | edad ${ageText} | dueño ${ownerName} | notas ${pet.notes || 'sin notas'}`,
+      { source: 'pet', petId: pet.id, name: pet.name }
+    );
+
+    return pet;
   }
 
   async remove(id: string, companyId: string) {
@@ -119,6 +145,7 @@ export class PetsService {
       where: { id },
       data: { isDeleted: true, deletedAt: new Date() },
     });
+    this.rag.deleteEmbedding(companyId, { source: 'pet', petId: id });
     this.logger.log(`Mascota eliminada (soft delete): ${id}`);
   }
 

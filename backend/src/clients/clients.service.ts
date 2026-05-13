@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { CreateClientDto, UpdateClientDto } from './dto/client.dto';
 
 @Injectable()
 export class ClientsService {
   private readonly logger = new Logger(ClientsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private rag: LocalRagService,
+  ) {}
 
   async findAll(companyId: string, pagination: { page?: number; limit?: number; search?: string } = {}) {
     const page = Number(pagination.page) || 1;
@@ -73,6 +77,11 @@ export class ClientsService {
       include: { pets: true },
     });
 
+    this.rag.upsertEmbedding(companyId,
+      `Cliente ${client.name} ${client.lastName || ''} | DNI ${client.dni || 'ND'} | email ${client.email || 'ND'} | tel ${client.phone || 'ND'} | dir ${client.address || 'ND'}`,
+      { source: 'client', clientId: client.id, name: client.name }
+    );
+
     this.logger.log(`Cliente creado: ${client.name} (${client.id})`);
     return client;
   }
@@ -80,7 +89,7 @@ export class ClientsService {
   async update(id: string, companyId: string, dto: UpdateClientDto) {
     await this.findOne(id, companyId);
 
-    return this.prisma.client.update({
+    const client = await this.prisma.client.update({
       where: { id },
       data: {
         ...(dto.name && { name: dto.name }),
@@ -95,6 +104,13 @@ export class ClientsService {
         ...(dto.notes && { notes: dto.notes }),
       },
     });
+
+    this.rag.upsertEmbedding(companyId,
+      `Cliente ${client.name} ${client.lastName || ''} | DNI ${client.dni || 'ND'} | email ${client.email || 'ND'} | tel ${client.phone || 'ND'} | dir ${client.address || 'ND'}`,
+      { source: 'client', clientId: client.id, name: client.name }
+    );
+
+    return client;
   }
 
   async remove(id: string, companyId: string) {
@@ -104,6 +120,8 @@ export class ClientsService {
     if (petsCount > 0) {
       throw new BadRequestException('El cliente tiene mascotas asociadas. Eliminar primero las mascotas.');
     }
+
+    this.rag.deleteEmbedding(companyId, { source: 'client', clientId: id });
 
     await this.prisma.client.update({
       where: { id },

@@ -5,6 +5,7 @@ import { SuppliesService } from './supplies.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 import { EventsModule } from '../events/events.module';
+import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { EventsModule } from '../events/events.module';
     PrismaModule,
     CloudinaryModule,
     EventsModule,
+    AiProxyModule,
   ],
   controllers: [SuppliesController],
   providers: [SuppliesService],

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { PdfService } from '../documents/pdf.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
 
@@ -10,6 +11,7 @@ export class MedicalRecordsService {
   constructor(
     private prisma: PrismaService,
     private pdfService: PdfService,
+    private rag: LocalRagService,
   ) {}
 
   async findAll(companyId: string, pagination: any = {}) {
@@ -249,6 +251,11 @@ export class MedicalRecordsService {
       this.logger.error('Error generando PDFs post-consulta', e)
     );
 
+    this.rag.upsertEmbedding(companyId,
+      `Historia médica de ${pet.name}. Fecha: ${result.record.date}. Motivo: ${result.record.visitReason}. Diagnóstico: ${result.record.diagnosis || 'N/A'}. Tratamiento: ${result.record.treatment || 'N/A'}. Observaciones: ${result.record.observations || 'Sin observaciones'}.`,
+      { source: 'medicalrecord', recordId: result.record.id, petId: pet.id, date: result.record.date }
+    );
+
     this.logger.log(`Historial creado: ${result.record.id} para mascota ${pet.name}`);
     return result;
   }
@@ -263,7 +270,7 @@ export class MedicalRecordsService {
   async update(id: string, companyId: string, dto: UpdateMedicalRecordDto) {
     await this.findOne(id, companyId);
 
-    return this.prisma.medicalRecord.update({
+    const record = await this.prisma.medicalRecord.update({
       where: { id },
       data: {
         ...(dto.visitReason && { visitReason: dto.visitReason }),
@@ -277,10 +284,18 @@ export class MedicalRecordsService {
       },
       include: { pet: true, procedures: true, prescriptions: true },
     });
+
+    this.rag.upsertEmbedding(companyId,
+      `Historia médica de ${record.pet.name}. Fecha: ${record.date}. Motivo: ${record.visitReason}. Diagnóstico: ${record.diagnosis || 'N/A'}. Tratamiento: ${record.treatment || 'N/A'}. Observaciones: ${record.observations || 'Sin observaciones'}.`,
+      { source: 'medicalrecord', recordId: record.id, petId: record.petId, date: record.date }
+    );
+
+    return record;
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
+    this.rag.deleteEmbedding(companyId, { source: 'medicalrecord', recordId: id });
     await this.prisma.medicalRecord.update({
       where: { id },
       data: { isDeleted: true, deletedAt: new Date() },

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { EventsGateway } from '../events/events.gateway';
 import * as ExcelJS from 'exceljs';
@@ -13,6 +14,7 @@ export class PriceItemsService {
     private prisma: PrismaService,
     private cloudinary: CloudinaryService,
     private events: EventsGateway,
+    private rag: LocalRagService,
   ) {}
 
   async findAll(companyId: string, q: any = {}) {
@@ -76,17 +78,31 @@ export class PriceItemsService {
         description: d.description 
       } 
     });
+
+    this.rag.upsertEmbedding(companyId,
+      `Precio: ${item.name}. Categoría: ${item.category || 'N/A'}. Precio: $${item.price}. Descripción: ${item.description || 'N/A'}.`,
+      { source: 'price', priceId: item.id, name: item.name }
+    );
+
     this.logger.log(`Precio creado: ${item.name} para company ${companyId}`);
     return item;
   }
 
   async update(id: string, companyId: string, d: any) {
     await this.findOne(id, companyId);
-    return this.prisma.priceItem.update({ where: { id }, data: d });
+    const item = await this.prisma.priceItem.update({ where: { id }, data: d });
+
+    this.rag.upsertEmbedding(companyId,
+      `Precio: ${item.name}. Categoría: ${item.category || 'N/A'}. Precio: $${item.price}. Descripción: ${item.description || 'N/A'}.`,
+      { source: 'price', priceId: item.id, name: item.name }
+    );
+
+    return item;
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
+    this.rag.deleteEmbedding(companyId, { source: 'price', priceId: id });
     return this.prisma.priceItem.delete({ where: { id } });
   }
 

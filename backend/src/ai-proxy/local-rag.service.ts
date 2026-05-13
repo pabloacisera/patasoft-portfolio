@@ -1,19 +1,19 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { Chroma } from '@langchain/community/vectorstores/chroma';
-import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
+import { GoogleGenAI } from '@google/genai';
+import { Pool } from 'pg';
 import Groq from 'groq-sdk';
 
 export type ProgressCallback = (data: { type: string; current: number; total: number; message: string }) => void;
 
 @Injectable()
-export class LocalRagService implements OnModuleInit {
+export class LocalRagService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(LocalRagService.name);
   private isInitialized = false;
-  private chromaUrl: string;
-  private embeddings: GoogleGenerativeAIEmbeddings;
+  private ai: GoogleGenAI;
   private groq: Groq;
+  private pool: Pool;
 
   constructor(
     private config: ConfigService,
@@ -22,35 +22,35 @@ export class LocalRagService implements OnModuleInit {
 
   async onModuleInit() {
     try {
-      this.chromaUrl = this.config.get('CHROMA_URL') || 'http://localhost:8000';
       this.groq = new Groq({ apiKey: this.config.get('GROQ_API_KEY') });
-      this.embeddings = new GoogleGenerativeAIEmbeddings({
-        apiKey: this.config.get('GEMINI_API_KEY'),
-        modelName: 'gemini-embedding-001',
-      });
+      this.ai = new GoogleGenAI({ apiKey: this.config.get('GEMINI_API_KEY') });
+      this.pool = new Pool({ connectionString: this.config.get('DATABASE_URL') });
       this.isInitialized = true;
-      this.logger.log(`✅ Local RAG service initialized (Chroma at ${this.chromaUrl})`);
+      this.logger.log('✅ Local RAG service initialized (pgvector)');
     } catch (error) {
       this.logger.warn(`⚠️ Local RAG init failed: ${error.message}`);
       this.isInitialized = false;
     }
   }
 
-  private getCollectionName(companyId: string): string {
-    return `company_${companyId}`;
+  async onModuleDestroy() {
+    if (this.pool) await this.pool.end();
+  }
+
+  private async embed(text: string): Promise<number[]> {
+    const res = await this.ai.models.embedContent({
+      model: 'gemini-embedding-2-preview',
+      contents: text,
+      config: { outputDimensionality: 768 },
+    });
+    return Array.from(res.embeddings[0].values);
   }
 
   async addDocuments(companyId: string, documents: any[], progressCallback?: ProgressCallback) {
     if (!this.isInitialized) {
-      this.logger.warn('RAG no inicializado, ignorando documentos');
-      if (progressCallback) progressCallback({ type: 'error', current: 0, total: documents.length, message: 'RAG no inicializado' });
+      progressCallback?.({ type: 'error', current: 0, total: documents.length, message: 'RAG no inicializado' });
       return { added: 0, status: 'skipped' };
     }
-
-    const docs = documents.map(doc => ({
-      pageContent: doc.content,
-      metadata: { ...doc.metadata, companyId },
-    }));
 
     const BATCH_SIZE = 5;
     const DELAY_MS = 400;
@@ -59,90 +59,170 @@ export class LocalRagService implements OnModuleInit {
     let totalFailed = 0;
     let batchNum = 0;
 
-    progressCallback?.({ type: 'start', current: 0, total: docs.length, message: `Iniciando sync: ${docs.length} documentos` });
+    progressCallback?.({ type: 'start', current: 0, total: documents.length, message: `Iniciando sync: ${documents.length} documentos` });
 
-    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('DELETE FROM langchain_vectors WHERE company_id = $1', [companyId]);
+    } finally {
+      client.release();
+    }
+
+    for (let i = 0; i < documents.length; i += BATCH_SIZE) {
       batchNum++;
-      const batch = docs.slice(i, i + BATCH_SIZE);
-      const batchEnd = Math.min(i + BATCH_SIZE, docs.length);
+      const batch = documents.slice(i, i + BATCH_SIZE);
+      const batchEnd = Math.min(i + BATCH_SIZE, documents.length);
       let attempt = 0;
       let success = false;
 
       while (attempt < MAX_RETRIES && !success) {
         attempt++;
         try {
-          progressCallback?.({ 
-            type: 'progress', 
-            current: i, 
-            total: docs.length, 
-            message: attempt > 1 
-              ? `Retry lote ${batchNum} (intento ${attempt}/${MAX_RETRIES}) - ${batchEnd}/${docs.length}...` 
-              : `Procesando lote ${batchNum} (${batchEnd}/${docs.length})...`
+          progressCallback?.({
+            type: 'progress',
+            current: i,
+            total: documents.length,
+            message: attempt > 1
+              ? `Retry lote ${batchNum} (intento ${attempt}/${MAX_RETRIES}) - ${batchEnd}/${documents.length}...`
+              : `Procesando lote ${batchNum} (${batchEnd}/${documents.length})...`,
           });
 
-          await Chroma.fromDocuments(batch, this.embeddings, {
-            collectionName: this.getCollectionName(companyId),
-            url: this.chromaUrl,
-          });
-          
+          for (const doc of batch) {
+            const embedding = await this.embed(doc.content);
+            const metadata = { ...doc.metadata, companyId };
+            const c = await this.pool.connect();
+            try {
+              await c.query(
+                `INSERT INTO langchain_vectors (content, metadata, embedding, company_id)
+                 VALUES ($1, $2, $3::vector, $4)`,
+                [doc.content, JSON.stringify(metadata), '[' + embedding.join(',') + ']', companyId]
+              );
+            } finally {
+              c.release();
+            }
+          }
+
           success = true;
           totalAdded += batch.length;
-
         } catch (error) {
           if (attempt >= MAX_RETRIES) {
-            this.logger.error(`Lote ${batchNum} falló definitivamente después de ${MAX_RETRIES} intentos: ${error.message}`);
             totalFailed += batch.length;
-            progressCallback?.({ 
-              type: 'error_batch', 
-              current: batchEnd, 
-              total: docs.length, 
-              message: `Lote ${batchNum} falló: ${error.message}` 
-            });
+            progressCallback?.({ type: 'error_batch', current: batchEnd, total: documents.length, message: `Lote ${batchNum} falló: ${error.message}` });
           } else {
-            this.logger.warn(`Lote ${batchNum} error intento ${attempt}: ${error.message}. Reintentando...`);
-            const backoff = DELAY_MS * Math.pow(2, attempt - 1);
-            await new Promise(r => setTimeout(r, backoff));
+            await new Promise(r => setTimeout(r, DELAY_MS * Math.pow(2, attempt - 1)));
           }
         }
       }
 
-      if (batchEnd < docs.length) {
-        await new Promise(r => setTimeout(r, DELAY_MS));
+      if (batchEnd < documents.length) await new Promise(r => setTimeout(r, DELAY_MS));
+    }
+
+    const vc = await this.pool.connect();
+    let verified = 0;
+    try {
+      const result = await vc.query('SELECT COUNT(*) FROM langchain_vectors WHERE company_id = $1', [companyId]);
+      verified = parseInt(result.rows[0].count, 10);
+    } finally {
+      vc.release();
+    }
+
+    progressCallback?.({
+      type: 'complete',
+      current: documents.length,
+      total: documents.length,
+      message: `Sync completado: ${totalAdded} docs agregados, ${totalFailed} fallidos, ${verified} verificados`,
+    });
+
+    return { added: totalAdded, failed: totalFailed, verified, status: totalFailed > 0 ? 'partial' : 'success' };
+  }
+
+  async upsertEmbedding(companyId: string, content: string, metadata: Record<string, any>) {
+    if (!this.isInitialized) return;
+
+    const embedding = await this.embed(content);
+    const meta = { ...metadata, companyId };
+
+    const conditions: string[] = ['company_id = $1'];
+    const params: any[] = [companyId];
+    let idx = 2;
+
+    const idKeys = ['clientId', 'petId', 'supplyId', 'priceId', 'recordId', 'id'];
+    for (const key of idKeys) {
+      if (metadata[key]) {
+        conditions.push(`metadata->>'${key}' = $${idx}`);
+        params.push(String(metadata[key]));
+        idx++;
       }
     }
 
-    const verify = await Chroma.fromExistingCollection(this.embeddings, {
-      collectionName: this.getCollectionName(companyId),
-      url: this.chromaUrl,
-    });
-    const verified = (await verify.similaritySearch('insumo', 500)).length;
+    const c = await this.pool.connect();
+    try {
+      await c.query(`DELETE FROM langchain_vectors WHERE ${conditions.join(' AND ')}`, params);
+      await c.query(
+        `INSERT INTO langchain_vectors (content, metadata, embedding, company_id)
+         VALUES ($1, $2, $3::vector, $4)`,
+        [content, JSON.stringify(meta), '[' + embedding.join(',') + ']', companyId]
+      );
+    } finally {
+      c.release();
+    }
 
-    progressCallback?.({ 
-      type: 'complete', 
-      current: docs.length, 
-      total: docs.length, 
-      message: totalFailed > 0 
-        ? `Sync completado: ${totalAdded} docs agregados, ${totalFailed} fallidos, ${verified} verificados` 
-        : `Sync completado: ${totalAdded} docs agregados, ${verified} verificados`
-    });
+    this.logger.log(`Embedding upserted for company ${companyId} (source: ${metadata.source})`);
+  }
 
-    this.logger.log(`RAG addDocuments completado: ${totalAdded} agregados, ${totalFailed} fallidos, ${verified} verificados`);
-    return { added: totalAdded, failed: totalFailed, verified, status: totalFailed > 0 ? 'partial' : 'success' };
+  async deleteEmbedding(companyId: string, metadata: Record<string, any>) {
+    if (!this.isInitialized) return;
+
+    const conditions: string[] = ['company_id = $1'];
+    const params: any[] = [companyId];
+    let idx = 2;
+
+    const idKeys = ['clientId', 'petId', 'supplyId', 'priceId', 'recordId', 'id'];
+    for (const key of idKeys) {
+      if (metadata[key]) {
+        conditions.push(`metadata->>'${key}' = $${idx}`);
+        params.push(String(metadata[key]));
+        idx++;
+      }
+    }
+
+    const c = await this.pool.connect();
+    try {
+      await c.query(`DELETE FROM langchain_vectors WHERE ${conditions.join(' AND ')}`, params);
+    } finally {
+      c.release();
+    }
+
+    this.logger.log(`Embedding deleted for company ${companyId} (source: ${metadata.source})`);
+  }
+
+  private async similaritySearch(companyId: string, query: string, k = 15): Promise<string[]> {
+    const embedding = await this.embed(query);
+    const vectorStr = '[' + embedding.join(',') + ']';
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT content FROM langchain_vectors
+         WHERE company_id = $1
+         ORDER BY embedding <=> $2::vector
+         LIMIT $3`,
+        [companyId, vectorStr, k]
+      );
+      return result.rows.map(r => r.content);
+    } finally {
+      client.release();
+    }
   }
 
   async query(companyId: string, message: string, history: any[] = []) {
     const model = this.config.get('GROQ_MODEL_DEFAULT') || 'llama-3.3-70b-versatile';
-
     let context = '';
+
     if (this.isInitialized) {
       try {
-        const vectorStore = await Chroma.fromExistingCollection(this.embeddings, {
-          collectionName: this.getCollectionName(companyId),
-          url: this.chromaUrl,
-        });
-        const results = await vectorStore.similaritySearch(message, 15);
+        const results = await this.similaritySearch(companyId, message);
         if (results.length > 0) {
-          context = results.map(r => r.pageContent).join('\n\n');
+          context = results.join('\n\n');
           this.logger.log(`RAG encontró ${results.length} documentos para company ${companyId}`);
         }
       } catch (error) {
@@ -155,7 +235,6 @@ export class LocalRagService implements OnModuleInit {
       : `Sos un asistente veterinario especializado. Respondé preguntas sobre medicina veterinaria, animales y cuidado de mascotas en español argentino.`;
 
     const messages: any[] = [{ role: 'system', content: systemPrompt }];
-
     if (Array.isArray(history)) {
       for (const h of history) {
         if (h.role && h.content) messages.push({ role: h.role, content: h.content });
@@ -163,34 +242,20 @@ export class LocalRagService implements OnModuleInit {
     }
     messages.push({ role: 'user', content: message });
 
-    const completion = await this.groq.chat.completions.create({
-      model,
-      messages,
-      max_tokens: 1024,
-      temperature: 0.7,
-    });
-
+    const completion = await this.groq.chat.completions.create({ model, messages, max_tokens: 1024, temperature: 0.7 });
     const answer = completion.choices[0]?.message?.content || 'Sin respuesta';
-    return {
-      message: { role: 'assistant', content: answer },
-      response: answer,
-      hasContext: !!context
-    };
+    return { message: { role: 'assistant', content: answer }, response: answer, hasContext: !!context };
   }
 
   async *queryStream(companyId: string, message: string, history: any[] = []) {
     const model = this.config.get('GROQ_MODEL_DEFAULT') || 'llama-3.3-70b-versatile';
-
     let context = '';
+
     if (this.isInitialized && this.groq) {
       try {
-        const vectorStore = await Chroma.fromExistingCollection(this.embeddings, {
-          collectionName: this.getCollectionName(companyId),
-          url: this.chromaUrl,
-        });
-        const results = await vectorStore.similaritySearch(message, 15);
+        const results = await this.similaritySearch(companyId, message);
         if (results.length > 0) {
-          context = results.map(r => r.pageContent).join('\n\n');
+          context = results.join('\n\n');
           this.logger.log(`RAG stream encontró ${results.length} documentos para company ${companyId}`);
         }
       } catch (error) {
@@ -203,7 +268,6 @@ export class LocalRagService implements OnModuleInit {
       : `Sos un asistente veterinario especializado. Respondé preguntas sobre medicina veterinaria, animales y cuidado de mascotas en español argentino.`;
 
     const messages: any[] = [{ role: 'system', content: systemPrompt }];
-
     if (Array.isArray(history)) {
       for (const h of history) {
         if (h.role && h.content) messages.push({ role: h.role, content: h.content });
@@ -211,19 +275,7 @@ export class LocalRagService implements OnModuleInit {
     }
     messages.push({ role: 'user', content: message });
 
-    if (!this.groq) {
-      this.logger.error('Groq client no inicializado');
-      return;
-    }
-
-    const stream = await this.groq.chat.completions.create({
-      model,
-      messages,
-      max_tokens: 1024,
-      temperature: 0.7,
-      stream: true,
-    });
-
+    const stream = await this.groq.chat.completions.create({ model, messages, max_tokens: 1024, temperature: 0.7, stream: true });
     for await (const chunk of stream) {
       const text = chunk.choices[0]?.delta?.content || '';
       if (text) yield text;

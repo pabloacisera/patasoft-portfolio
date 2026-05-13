@@ -32,34 +32,33 @@ export class RagIngestionService {
 
     const sendCategory = (categoryName: string, count: number) => {
       completedCategories++;
-      const pct = Math.round((completedCategories / totalCategories) * 100);
       send('progress', completedCategories, totalCategories, `Sincronizando ${categoryName}: ${count} documentos`, categoryName);
     };
 
     try {
+      const allDocs: Array<{ content: string; metadata: Record<string, any> }> = [];
+
       const company = await this.prisma.company.findUnique({ where: { id: companyId } });
       if (company) {
-        const companyDoc = {
+        allDocs.push({
           content: `Veterinaria: ${company.name}. Dirección: ${company.address || 'No especificada'}. Teléfono: ${company.phone || 'No especificado'}. Email: ${company.email || 'No especificado'}.`,
           metadata: { source: 'company', type: 'company' }
-        };
-        await this.aiProxy.sendToRag(companyId, [companyDoc], (p) => send(p.type, p.current, p.total, `[Empresa] ${p.message}`, 'empresa'));
+        });
         results.company = true;
-        sendCategory('Empresa', 1);
       }
+      sendCategory('Empresa', 1);
 
       const clients = await this.prisma.client.findMany({ where: { companyId } });
       results.clients = clients.length;
       if (clients.length > 0) {
-        const clientDocs = clients.map(c => ({
-          content: `Cliente ${c.name} ${c.lastName || ''} | DNI ${c.dni || 'ND'} | email ${c.email || 'ND'} | tel ${c.phone || 'ND'} | dir ${c.address || 'ND'}`,
-          metadata: { source: 'client', clientId: c.id, name: c.name }
-        }));
-        await this.aiProxy.sendToRag(companyId, clientDocs, (p) => send(p.type, p.current, p.total, `[Clientes] ${p.message}`, 'clientes'));
-        sendCategory('Clientes', clients.length);
-      } else {
-        sendCategory('Clientes', 0);
+        for (const c of clients) {
+          allDocs.push({
+            content: `Cliente ${c.name} ${c.lastName || ''} | DNI ${c.dni || 'ND'} | email ${c.email || 'ND'} | tel ${c.phone || 'ND'} | dir ${c.address || 'ND'}`,
+            metadata: { source: 'client', clientId: c.id, name: c.name }
+          });
+        }
       }
+      sendCategory('Clientes', clients.length);
 
       const pets = await this.prisma.pet.findMany({ 
         where: { companyId },
@@ -67,49 +66,44 @@ export class RagIngestionService {
       });
       results.pets = pets.length;
       if (pets.length > 0) {
-        const petDocs = pets.map(p => {
+        for (const p of pets) {
           const ownerName = p.client?.name || 'N/A';
           let ageText = 'N/A';
           if (p.birthDate) {
             const ageMs = Date.now() - p.birthDate.getTime();
             ageText = Math.floor(ageMs / (365.25 * 24 * 60 * 60 * 1000)) + ' años';
           }
-          return {
+          allDocs.push({
             content: `Mascota ${p.name} | especie ${p.species} | raza ${p.breed || 'ND'} | peso ${p.weight || 'ND'}kg | edad ${ageText} | dueño ${ownerName} | notas ${p.notes || 'sin notas'}`,
             metadata: { source: 'pet', petId: p.id, name: p.name }
-          };
-        });
-        await this.aiProxy.sendToRag(companyId, petDocs, (p) => send(p.type, p.current, p.total, `[Mascotas] ${p.message}`, 'mascotas'));
-        sendCategory('Mascotas', pets.length);
-      } else {
-        sendCategory('Mascotas', 0);
+          });
+        }
       }
+      sendCategory('Mascotas', pets.length);
 
       const supplies = await this.prisma.supply.findMany({ where: { companyId } });
       results.supplies = supplies.length;
       if (supplies.length > 0) {
-        const supplyDocs = supplies.map(s => ({
-          content: `${s.name} | marca ${s.brand || 'ND'} | stock ${s.quantity} ${s.unit || 'unidades'} | precio $${s.unitPrice} | stock min ${s.minQuantity || 10}`,
-          metadata: { source: 'supply', supplyId: s.id, name: s.name, quantity: s.quantity }
-        }));
-        await this.aiProxy.sendToRag(companyId, supplyDocs, (p) => send(p.type, p.current, p.total, `[Insumos] ${p.message}`, 'insumos'));
-        sendCategory('Insumos', supplies.length);
-      } else {
-        sendCategory('Insumos', 0);
+        for (const s of supplies) {
+          allDocs.push({
+            content: `${s.name} | marca ${s.brand || 'ND'} | stock ${s.quantity} ${s.unit || 'unidades'} | precio $${s.unitPrice} | stock min ${s.minQuantity || 10}`,
+            metadata: { source: 'supply', supplyId: s.id, name: s.name, quantity: s.quantity }
+          });
+        }
       }
+      sendCategory('Insumos', supplies.length);
 
       const prices = await this.prisma.priceItem.findMany({ where: { companyId } });
       results.prices = prices.length;
       if (prices.length > 0) {
-        const priceDocs = prices.map(p => ({
-          content: `Precio: ${p.name}. Categoría: ${p.category || 'N/A'}. Precio: $${p.price}. Descripción: ${p.description || 'N/A'}.`,
-          metadata: { source: 'price', priceId: p.id, name: p.name }
-        }));
-        await this.aiProxy.sendToRag(companyId, priceDocs, (p) => send(p.type, p.current, p.total, `[Precios] ${p.message}`, 'precios'));
-        sendCategory('Precios', prices.length);
-      } else {
-        sendCategory('Precios', 0);
+        for (const p of prices) {
+          allDocs.push({
+            content: `Precio: ${p.name}. Categoría: ${p.category || 'N/A'}. Precio: $${p.price}. Descripción: ${p.description || 'N/A'}.`,
+            metadata: { source: 'price', priceId: p.id, name: p.name }
+          });
+        }
       }
+      sendCategory('Precios', prices.length);
 
       const medicalRecords = await this.prisma.medicalRecord.findMany({
         where: { pet: { companyId } },
@@ -118,17 +112,22 @@ export class RagIngestionService {
       });
       results.medicalRecords = medicalRecords.length;
       if (medicalRecords.length > 0) {
-        const recordDocs = medicalRecords.map(r => ({
-          content: `Historia médica de ${r.pet?.name || 'mascota'}. Fecha: ${r.date}. Motivo: ${r.visitReason}. Diagnóstico: ${r.diagnosis || 'N/A'}. Tratamiento: ${r.treatment || 'N/A'}. Observaciones: ${r.observations || 'Sin observaciones'}.`,
-          metadata: { source: 'medicalrecord', recordId: r.id, petId: r.petId, date: r.date }
-        }));
-        await this.aiProxy.sendToRag(companyId, recordDocs, (p) => send(p.type, p.current, p.total, `[Historiales] ${p.message}`, 'historiales'));
-        sendCategory('Historiales médicos', medicalRecords.length);
-      } else {
-        sendCategory('Historiales médicos', 0);
+        for (const r of medicalRecords) {
+          allDocs.push({
+            content: `Historia médica de ${r.pet?.name || 'mascota'}. Fecha: ${r.date}. Motivo: ${r.visitReason}. Diagnóstico: ${r.diagnosis || 'N/A'}. Tratamiento: ${r.treatment || 'N/A'}. Observaciones: ${r.observations || 'Sin observaciones'}.`,
+            metadata: { source: 'medicalrecord', recordId: r.id, petId: r.petId, date: r.date }
+          });
+        }
+      }
+      sendCategory('Historiales médicos', medicalRecords.length);
+
+      if (allDocs.length > 0) {
+        await this.aiProxy.sendToRag(companyId, allDocs, (p) => {
+          send(p.type, p.current, p.total, p.message, 'all');
+        });
       }
 
-      this.logger.log(`RAG ingestion completed for company ${companyId}: ${JSON.stringify(results)}`);
+      this.logger.log(`RAG ingestion completed for company ${companyId}: ${JSON.stringify(results)} (${allDocs.length} total docs)`);
       return { success: true, ingested: results };
 
     } catch (error) {

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { EventsGateway } from '../events/events.gateway';
 import * as ExcelJS from 'exceljs';
@@ -12,6 +13,7 @@ export class SuppliesService {
     private prisma: PrismaService,
     private cloudinary: CloudinaryService,
     private events: EventsGateway,
+    private rag: LocalRagService,
   ) {}
 
   async findAll(companyId: string, q: any = {}) {
@@ -78,23 +80,36 @@ export class SuppliesService {
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       },
     });
+    this.rag.upsertEmbedding(companyId,
+      `${supply.name} | marca ${supply.brand || 'ND'} | stock ${supply.quantity} ${supply.unit || 'unidades'} | precio $${supply.unitPrice} | stock min ${supply.minQuantity || 10}`,
+      { source: 'supply', supplyId: supply.id, name: supply.name, quantity: supply.quantity }
+    );
+
     this.logger.log(`Insumo creado: ${supply.name}`);
     return supply;
   }
 
   async update(id: string, companyId: string, dto: any) {
     await this.findOne(id, companyId);
-    return this.prisma.supply.update({ 
+    const supply = await this.prisma.supply.update({ 
       where: { id }, 
       data: {
         ...dto,
         ...(dto.expiresAt && { expiresAt: new Date(dto.expiresAt) })
       } 
     });
+
+    this.rag.upsertEmbedding(companyId,
+      `${supply.name} | marca ${supply.brand || 'ND'} | stock ${supply.quantity} ${supply.unit || 'unidades'} | precio $${supply.unitPrice} | stock min ${supply.minQuantity || 10}`,
+      { source: 'supply', supplyId: supply.id, name: supply.name, quantity: supply.quantity }
+    );
+
+    return supply;
   }
 
   async remove(id: string, companyId: string) {
     await this.findOne(id, companyId);
+    this.rag.deleteEmbedding(companyId, { source: 'supply', supplyId: id });
     await this.prisma.supply.update({
       where: { id },
       data: { isDeleted: true, deletedAt: new Date() },

@@ -5,6 +5,7 @@ import { memoryStorage } from 'multer';
 import { PetsController } from './pets.controller';
 import { PetsService } from './pets.service';
 import { PdfModule } from '../documents/pdf.module';
+import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { PdfModule } from '../documents/pdf.module';
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
     MulterModule.register({ storage: memoryStorage() }),
+    AiProxyModule,
   ],
   controllers: [PetsController],
   providers: [PetsService],
