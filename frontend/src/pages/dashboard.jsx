@@ -278,6 +278,10 @@ export async function renderSettingsCompany() {
 }
 
 export async function renderSettingsSubscription() {
+  const isBlocked = !!document.getElementById('blocked-banner');
+  if (isBlocked) {
+    return renderSubscriptionStandalone();
+  }
   if (!(await ensureDashboardLayout())) return;
   return renderSettingsPage('subscription');
 }
@@ -306,6 +310,274 @@ export async function renderSettingsConnections() {
   pageData.settingsConnections = pageData.settingsConnections || { page: 1 };
   await loadConnectionsData(pageData.settingsConnections.page, '');
   return renderSettingsPage('connections');
+}
+
+export async function renderExportData() {
+  const isBlocked = !!document.getElementById('blocked-banner');
+  if (isBlocked) {
+    return renderExportDataStandalone();
+  }
+  if (!(await ensureDashboardLayout())) return;
+  renderSettingsPage('export');
+}
+
+async function renderExportDataContent(content) {
+  content.innerHTML = `
+    <div class="settings-section">
+      <h3>Exportar mis datos</h3>
+      <p style="color: var(--text-secondary); font-size: var(--text-sm); margin-bottom: var(--space-4);">
+        Descargá toda la información de tu clínica en un archivo Excel con las siguientes secciones:
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:var(--space-2);margin-bottom:var(--space-5);font-size:var(--text-sm);color:var(--text-secondary);">
+        <span>✓ Clientes</span>
+        <span>✓ Mascotas</span>
+        <span>✓ Historiales clínicos</span>
+        <span>✓ Procedimientos</span>
+        <span>✓ Prescripciones</span>
+        <span>✓ Pagos</span>
+        <span>✓ Items de pago</span>
+        <span>✓ Deudas</span>
+        <span>✓ Insumos</span>
+        <span>✓ Compras</span>
+        <span>✓ Movimientos de caja</span>
+        <span>✓ Lista de precios</span>
+      </div>
+      <button class="btn btn-primary" id="btn-export-all" style="padding:12px 32px;font-size:var(--text-base);">
+        ⬇ Descargar todo
+      </button>
+    </div>
+  `;
+
+  document.getElementById('btn-export-all')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-export-all');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generando...';
+    try {
+      await api.downloadAndSave('/data/export-all', 'mis-datos.xlsx');
+      showToast('Descarga completa', 'success');
+      btn.disabled = false;
+      btn.textContent = originalText;
+    } catch (e) {
+      showToast(e.message || 'Error al descargar', 'error');
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  });
+}
+
+async function renderSubscriptionStandalone() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <style>
+      body { margin:0; background:#0f172a; color:white; font-family:sans-serif; }
+      .sa-wrap { max-width:640px; margin:0 auto; padding:80px 24px 40px; }
+      .sa-title { font-size:22px; font-weight:700; margin-bottom:4px; }
+      .sa-subtitle { color:#94a3b8; font-size:14px; margin-bottom:24px; }
+      .sa-card { background:#1e293b; border:1.5px solid #334155; border-radius:12px; padding:20px; margin-bottom:20px; }
+      .sa-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+      .sa-label { font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; }
+      .sa-plan-name { font-size:18px; font-weight:700; }
+      .sa-badge { display:inline-flex; align-items:center; padding:3px 12px; border-radius:999px; font-size:12px; font-weight:600; }
+      .sa-badge-expired { background:rgba(239,68,68,0.15); color:#fca5a5; }
+      .sa-badge-trial { background:rgba(245,158,11,0.15); color:#fcd34d; }
+      .sa-badge-active { background:rgba(16,185,129,0.15); color:#6ee7b7; }
+      .sa-badge-cancelled { background:rgba(107,114,128,0.15); color:#9ca3af; }
+      .sa-meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+      .sa-meta-item { display:flex; flex-direction:column; gap:2px; }
+      .sa-meta-label { font-size:11px; color:#64748b; text-transform:uppercase; }
+      .sa-meta-value { font-size:14px; font-weight:600; }
+      .sa-subtitle2 { font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; margin-bottom:16px; }
+      .sa-plans { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:24px; }
+      .sa-plan-card { border:2px solid #334155; border-radius:12px; padding:20px; position:relative; }
+      .sa-plan-card.featured { border-color:#4ade80; background:rgba(74,222,128,0.04); }
+      .sa-plan-badge { position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:#4ade80; color:#0f172a; font-size:11px; font-weight:700; padding:2px 12px; border-radius:999px; white-space:nowrap; }
+      .sa-plan-name2 { font-size:18px; font-weight:700; margin-bottom:4px; }
+      .sa-plan-price { font-size:28px; font-weight:800; color:#4ade80; }
+      .sa-plan-price span { font-size:13px; font-weight:400; color:#94a3b8; }
+      .sa-plan-saving { font-size:11px; color:#6ee7b7; background:rgba(16,185,129,0.1); padding:2px 8px; border-radius:999px; display:inline-block; margin-bottom:12px; }
+      .sa-features { list-style:none; padding:0; margin:12px 0; display:flex; flex-direction:column; gap:6px; }
+      .sa-features li { font-size:13px; color:#94a3b8; display:flex; align-items:center; gap:6px; }
+      .sa-features li::before { content:"✓"; color:#4ade80; font-weight:700; }
+      .sa-btn { width:100%; padding:10px 0; border:none; border-radius:8px; font-weight:600; font-size:14px; cursor:pointer; margin-top:8px; }
+      .sa-btn-primary { background:#6366f1; color:white; }
+      .sa-btn-primary:hover { background:#5558e6; }
+      .sa-btn-primary:disabled { opacity:0.5; cursor:default; }
+      .sa-btn-secondary { background:#334155; color:#94a3b8; }
+      .sa-loading { text-align:center; padding:60px 0; color:#94a3b8; }
+    </style>
+    <div class="sa-wrap">
+      <div class="sa-loading" id="sa-loading">Cargando información de suscripción...</div>
+    </div>
+  `;
+
+  let sub;
+  try {
+    sub = await api.get('/subscriptions/status');
+  } catch (e) {
+    app.innerHTML = `
+      <style>body{margin:0;background:#0f172a;color:white;font-family:sans-serif;}</style>
+      <div class="sa-wrap"><p style="color:#94a3b8">Error cargando suscripción. Intentá de nuevo.</p></div>
+    `;
+    return;
+  }
+
+  const now = new Date();
+  const trialEnd = sub.trialEndsAt ? new Date(sub.trialEndsAt) : null;
+  const expireEnd = sub.expiresAt ? new Date(sub.expiresAt) : null;
+  const isExpired = ['EXPIRED', 'BLOCKED'].includes(sub.status);
+  const isTrial = sub.status === 'TRIAL';
+  const isActive = sub.status === 'ACTIVE';
+  const isCancelled = sub.status === 'CANCELLED';
+  const statusLabels = { TRIAL: 'Prueba gratuita', ACTIVE: 'Activo', EXPIRED: 'Expirado', CANCELLED: 'Cancelado', BLOCKED: 'Bloqueado' };
+  const planLabels = { TRIAL: 'Trial', MONTHLY: 'Mensual', YEARLY: 'Anual' };
+
+  app.querySelector('.sa-wrap').innerHTML = `
+    <div class="sa-title">Suscripción</div>
+    <div class="sa-subtitle">Renová tu plan para recuperar el acceso completo.</div>
+
+    <div class="sa-card">
+      <div class="sa-card-header">
+        <div>
+          <div class="sa-label">Plan actual</div>
+          <div class="sa-plan-name">${planLabels[sub.plan] || sub.plan}</div>
+        </div>
+        <span class="sa-badge ${isExpired ? 'sa-badge-expired' : isTrial ? 'sa-badge-trial' : isActive ? 'sa-badge-active' : 'sa-badge-cancelled'}">
+          ${statusLabels[sub.status] || sub.status}
+        </span>
+      </div>
+      <div class="sa-meta">
+        ${isTrial && trialEnd ? `
+          <div class="sa-meta-item">
+            <span class="sa-meta-label">Trial vence</span>
+            <span class="sa-meta-value">${formatDate(sub.trialEndsAt)}</span>
+          </div>` : ''}
+        ${isActive && expireEnd ? `
+          <div class="sa-meta-item">
+            <span class="sa-meta-label">Próximo vencimiento</span>
+            <span class="sa-meta-value">${formatDate(sub.expiresAt)}</span>
+          </div>` : ''}
+        <div class="sa-meta-item">
+          <span class="sa-meta-label">Desde</span>
+          <span class="sa-meta-value">${formatDate(sub.startedAt)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sa-subtitle2">Elegí tu plan</div>
+
+    <div class="sa-plans">
+      <div class="sa-plan-card">
+        <div class="sa-plan-name2">Mensual</div>
+        <div class="sa-plan-price">$27.000 <span>/ mes</span></div>
+        <ul class="sa-features">
+          <li>Clientes y mascotas ilimitados</li>
+          <li>Historiales clínicos completos</li>
+          <li>Gestión de insumos y stock</li>
+          <li>Pagos y deudas</li>
+          <li>Chat con IA veterinaria</li>
+          <li>Soporte por email</li>
+        </ul>
+        <button class="sa-btn sa-btn-primary" id="sa-btn-monthly">Suscribirme mensual</button>
+      </div>
+
+      <div class="sa-plan-card featured">
+        <div class="sa-plan-badge">Recomendado</div>
+        <div class="sa-plan-name2">Anual</div>
+        <div class="sa-plan-price">$240.000 <span>/ año</span></div>
+        <div class="sa-plan-saving">Ahorrás $84.000 vs mensual</div>
+        <ul class="sa-features">
+          <li>Todo lo del plan mensual</li>
+          <li>2 meses gratis</li>
+          <li>Conexiones con otras clínicas</li>
+          <li>Exportación de reportes PDF</li>
+          <li>Soporte prioritario</li>
+          <li>Configuración de precios personalizada</li>
+        </ul>
+        <button class="sa-btn sa-btn-primary" id="sa-btn-yearly">Suscribirme anual</button>
+        <button class="sa-btn sa-btn-secondary" id="sa-btn-test" style="margin-top:8px;opacity:0.5;font-size:11px;">[TEST] $150 por 2 días</button>
+      </div>
+    </div>
+  `;
+
+  async function handleSubscribe(plan) {
+    const btn = document.getElementById(`sa-btn-${plan}`);
+    if (!btn || btn.disabled) return;
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Procesando...';
+    try {
+      const result = await api.post('/subscriptions/checkout', { plan: plan.toUpperCase() });
+      if (result.initPoint) {
+        window.location.href = result.initPoint;
+      } else {
+        showToast('Error al iniciar el pago', 'error');
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    } catch (e) {
+      showToast(e.message || 'Error al procesar la suscripción', 'error');
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+
+  document.getElementById('sa-btn-monthly')?.addEventListener('click', () => handleSubscribe('monthly'));
+  document.getElementById('sa-btn-yearly')?.addEventListener('click', () => handleSubscribe('yearly'));
+  document.getElementById('sa-btn-test')?.addEventListener('click', () => handleSubscribe('test'));
+}
+
+async function renderExportDataStandalone() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <style>
+      body { margin:0; background:#0f172a; color:white; font-family:sans-serif; }
+      .sa-wrap { max-width:640px; margin:0 auto; padding:80px 24px 40px; }
+      .sa-title { font-size:22px; font-weight:700; margin-bottom:4px; }
+      .sa-subtitle { color:#94a3b8; font-size:14px; margin-bottom:24px; }
+      .sa-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:24px; }
+      .sa-grid span { font-size:13px; color:#94a3b8; }
+      .sa-btn-dl { background:#6366f1; color:white; padding:12px 32px; border:none; border-radius:8px; font-weight:600; font-size:15px; cursor:pointer; }
+      .sa-btn-dl:hover { background:#5558e6; }
+      .sa-btn-dl:disabled { opacity:0.5; cursor:default; }
+    </style>
+    <div class="sa-wrap">
+      <div class="sa-title">Exportar mis datos</div>
+      <div class="sa-subtitle">Descargá toda la información de tu clínica en un archivo Excel.</div>
+      <div class="sa-grid">
+        <span>✓ Clientes</span>
+        <span>✓ Mascotas</span>
+        <span>✓ Historiales clínicos</span>
+        <span>✓ Procedimientos</span>
+        <span>✓ Prescripciones</span>
+        <span>✓ Pagos</span>
+        <span>✓ Items de pago</span>
+        <span>✓ Deudas</span>
+        <span>✓ Insumos</span>
+        <span>✓ Compras</span>
+        <span>✓ Movimientos de caja</span>
+        <span>✓ Lista de precios</span>
+      </div>
+      <button class="sa-btn-dl" id="sa-btn-export">⬇ Descargar todo</button>
+    </div>
+  `;
+
+  document.getElementById('sa-btn-export')?.addEventListener('click', async () => {
+    const btn = document.getElementById('sa-btn-export');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generando...';
+    try {
+      await api.downloadAndSave('/data/export-all', 'mis-datos.xlsx');
+      showToast('Descarga completa', 'success');
+      btn.disabled = false;
+      btn.textContent = originalText;
+    } catch (e) {
+      showToast(e.message || 'Error al descargar', 'error');
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  });
 }
 
 function renderDashboardLayout(user) {
@@ -1190,6 +1462,7 @@ async function renderMedicalRecordsPage(content) {
             <td>
               <button class="btn btn-outline btn-sm" data-id="${r.id}" data-action="view">Ver</button>
               <button class="btn btn-outline btn-sm" data-id="${r.id}" data-action="edit">Editar</button>
+              <button class="btn btn-outline btn-sm" data-id="${r.id}" data-action="download-record-pdf" title="Descargar receta médica">📄 Receta</button>
               <button class="btn btn-danger btn-sm" data-id="${r.id}" data-action="delete">Eliminar</button>
             </td>
           </tr>
@@ -1279,10 +1552,52 @@ function showViewRecordModal(recordId) {
         <h4>Procedimientos</h4>
         ${record.procedures.map(p => `<div class="detail-row"><span>${p.name}</span><span>${p.priceItem?.name || ''}</span></div>`).join('')}
       ` : ''}
+      <hr>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary btn-sm" id="download-prescription-btn">📄 Descargar Receta</button>
+        ${record.payment?.id ? `<button class="btn btn-outline btn-sm" id="download-receipt-btn">🧾 Descargar Recibo</button>` : ''}
+      </div>
     `,
     showCancel: false,
     confirmText: 'Cerrar',
   });
+  
+  setTimeout(() => {
+    const prescBtn = document.getElementById('download-prescription-btn');
+    if (prescBtn) {
+      prescBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const blob = await api.getBlob(`/medical-records/${recordId}/pdf`);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `receta-${recordId.slice(-6)}.pdf`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          showToast('Error al generar la receta', 'error');
+        }
+      });
+    }
+    const receiptBtn = document.getElementById('download-receipt-btn');
+    if (receiptBtn) {
+      receiptBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const blob = await api.getBlob(`/payments/${record.payment.id}/receipt`);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `recibo-${record.payment.id.slice(-6)}.pdf`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          showToast('Error al generar el recibo', 'error');
+        }
+      });
+    }
+  }, 100);
 }
 
 function showEditRecordModal(recordId) {
@@ -1455,15 +1770,6 @@ function showAddRecordModal() {
       
       <div class="record-section">
         <div class="record-section-title">
-          Prescripciones Médicas
-          <button type="button" class="btn btn-outline btn-sm" id="add-prescription-btn">+ Medicamento</button>
-        </div>
-        <p class="section-desc">Instructivo médico: medicamento, dosis, frecuencia y duración del tratamiento.</p>
-        <div id="prescriptions-container"></div>
-      </div>
-      
-      <div class="record-section">
-        <div class="record-section-title">
           Procedimientos
           <button type="button" class="btn btn-outline btn-sm" id="add-procedure-btn">+ Procedimiento</button>
         </div>
@@ -1478,6 +1784,15 @@ function showAddRecordModal() {
         </div>
         <p class="section-desc">Productos e insumos utilizados en la consulta. Se cobran al cliente.</p>
         <div id="supply-items-container"></div>
+      </div>
+      
+      <div class="record-section">
+        <div class="record-section-title">
+          Prescripciones Médicas
+          <button type="button" class="btn btn-outline btn-sm" id="add-prescription-btn">+ Medicamento</button>
+        </div>
+        <p class="section-desc">Instructivo médico: medicamento, dosis, frecuencia y duración del tratamiento.</p>
+        <div id="prescriptions-container"></div>
       </div>
       
       <div class="record-section">
@@ -1588,14 +1903,14 @@ function showAddRecordModal() {
       if (prescriptions.length) payload.prescriptions = prescriptions;
       
       if (paymentMethod) {
-        const procTotal = procedures.reduce((s, p) => s + (p.customPrice * p.quantity), 0);
-        const supplyTotal = supplyItems.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
-        payload.payment = {
-          method: paymentMethod,
-          status: document.getElementById('record-payment-status').value,
-          dueDate: document.getElementById('record-payment-dueDate').value || undefined,
-          notes: document.getElementById('record-payment-notes').value.trim() || undefined,
-        };
+        payload.paymentMethod = paymentMethod;
+        payload.paymentStatus = document.getElementById('record-payment-status').value;
+        payload.paymentDueDate = document.getElementById('record-payment-dueDate').value || undefined;
+        payload.paymentNotes = document.getElementById('record-payment-notes').value.trim() || undefined;
+      }
+
+      if (supplyItems.length) {
+        payload.supplyItems = supplyItems;
       }
       
       try {
@@ -2827,6 +3142,7 @@ async function renderSettingsPage(tab) {
       <a class="settings-tab ${tab === 'prices' ? 'active' : ''}" href="/settings/prices">Precios</a>
       <a class="settings-tab ${tab === 'ai' ? 'active' : ''}" href="/settings/ai">IA</a>
       <a class="settings-tab ${tab === 'connections' ? 'active' : ''}" href="/settings/connections">Conexiones</a>
+      <a class="settings-tab ${tab === 'export' ? 'active' : ''}" href="/settings/export-data">Exportar datos</a>
     </div>
     <div id="settings-content"></div>
   `;
@@ -2847,6 +3163,7 @@ async function renderSettingsPage(tab) {
     case 'prices': await renderSettingsPricesContent(contentEl); break;
     case 'ai': await renderSettingsAIContent(contentEl); break;
     case 'connections': await renderSettingsConnectionsContent(contentEl); break;
+    case 'export': await renderExportDataContent(contentEl); break;
   }
 }
 

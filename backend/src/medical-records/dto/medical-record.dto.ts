@@ -87,6 +87,25 @@ class PrescriptionDto {
   soldInClinic?: boolean;
 }
 
+class SupplyItemDto {
+  @IsString()
+  description: string;
+
+  @IsNumber()
+  quantity: number;
+
+  @IsNumber()
+  unitPrice: number;
+
+  @IsNumber()
+  totalPrice: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  supplyId?: string;
+}
+
 export class CreateMedicalRecordDto {
   @IsUUID()
   petId: string;
@@ -147,6 +166,13 @@ export class CreateMedicalRecordDto {
   @ValidateNested({ each: true })
   @Type(() => PrescriptionDto)
   prescriptions?: PrescriptionDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SupplyItemDto)
+  supplyItems?: SupplyItemDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger, BadRequestException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { PdfService } from '../documents/pdf.service';
+import { CashRegisterService } from '../cash-register/cash-register.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class MedicalRecordsService {
     private prisma: PrismaService,
     private pdfService: PdfService,
     private rag: LocalRagService,
+    private cashService: CashRegisterService,
   ) {}
 
   async findAll(companyId: string, pagination: any = {}) {
@@ -141,6 +143,17 @@ export class MedicalRecordsService {
           itemType: 'SUPPLY',
         });
       }
+
+      for (const item of (dto.supplyItems || [])) {
+        totalAmount += item.totalPrice || (item.unitPrice * item.quantity);
+        paymentItems.push({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice || (item.unitPrice * item.quantity),
+          itemType: 'SUPPLY',
+        });
+      }
     }
 
     // Transacción atómica
@@ -246,7 +259,12 @@ export class MedicalRecordsService {
       return { record, payment };
     });
 
-    // 5. Generar PDFs en background (no bloquear la respuesta)
+    // 5. Movimiento de caja para pagos en efectivo
+    if (dto.paymentMethod === 'CASH' && dto.paymentStatus !== 'CANCELLED') {
+      await this.cashService.createFromPayment(companyId, result.payment.id, result.payment.totalAmount);
+    }
+
+    // 6. Generar PDFs en background (no bloquear la respuesta)
     this.generateAndStorePdfs(result.record.id, result.payment.id, companyId).catch(e =>
       this.logger.error('Error generando PDFs post-consulta', e)
     );

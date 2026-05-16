@@ -4,6 +4,7 @@ import { MedicalRecordsController } from './medical-records.controller';
 import { MedicalRecordsService } from './medical-records.service';
 import { PdfService } from '../documents/pdf.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
+import { CashRegisterModule } from '../cash-register/cash-register.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
     AiProxyModule,
+    CashRegisterModule,
   ],
   controllers: [MedicalRecordsController],
   providers: [MedicalRecordsService, PdfService],

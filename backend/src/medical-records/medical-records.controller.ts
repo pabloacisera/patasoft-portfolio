@@ -6,7 +6,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
-import { PdfService } from '../documents/pdf.service';
 
 @ApiTags('medical-records')
 @ApiBearerAuth()
@@ -48,6 +47,19 @@ export class MedicalRecordsController {
   @Post(':id/prescriptions')
   addPrescription(@Param('id') id: string, @Body() dto: any, @CurrentUser() user: any) {
     return this.medicalRecordsService.addPrescription(id, user.companyId, dto);
+  }
+
+  @Get(':id/pdf')
+  @UseGuards(JwtAuthGuard)
+  async getPrescriptionPdf(@Param('id') id: string, @CurrentUser() user: any, @Res() res: Response) {
+    await this.medicalRecordsService.findOne(id, user.companyId);
+    const pdfBuffer = await this.medicalRecordsService.generateAndStorePrescription(id, user.companyId);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename=receta_${id.slice(-6)}.pdf`,
+      'Content-Length': pdfBuffer.byteLength,
+    });
+    return res.end(pdfBuffer);
   }
 
   @Get(':id/prescription/url')
