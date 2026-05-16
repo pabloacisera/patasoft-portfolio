@@ -1542,10 +1542,18 @@ function showViewRecordModal(recordId) {
         <div class="detail-row"><span>Estado:</span><span>${formatStatus(record.payment.status, 'payment')}</span></div>
         <div class="detail-row"><span>Método:</span><span>${record.payment.method || '-'}</span></div>
       ` : ''}
-      ${record.prescriptions?.length ? `
+        ${record.prescriptions?.length ? `
         <hr>
         <h4>Prescripciones</h4>
-        ${record.prescriptions.map(p => `<div class="detail-row"><span>${p.medicineName}</span><span>${p.dose} ${p.doseQuantity || ''} ${p.doseUnit || ''} - ${p.frequency} - ${p.duration}</span></div>`).join('')}
+        ${record.prescriptions.map(p => {
+          const doseStr = p.dose ? p.dose : '';
+          const qtyStr = (p.doseQuantity && p.doseQuantity > 0) ? p.doseQuantity : '';
+          const unitStr = p.doseUnit ? p.doseUnit : '';
+          const parts = [doseStr, qtyStr, unitStr].filter(Boolean).join(' ');
+          const freqDur = [p.frequency, p.duration].filter(Boolean).join(' - ');
+          const detail = [parts, freqDur].filter(Boolean).join(' | ');
+          return `<div class="detail-row"><span>${p.medicineName}</span><span>${detail || '-'}</span></div>`;
+        }).join('')}
       ` : ''}
       ${record.procedures?.length ? `
         <hr>
@@ -1855,8 +1863,11 @@ function showAddRecordModal() {
         const doseUnit = row.querySelector('.presc-doseUnit')?.value?.trim();
         const frequency = row.querySelector('.presc-freq')?.value?.trim();
         const duration = row.querySelector('.presc-dur')?.value?.trim();
+        const supplyId = row.querySelector('.presc-supply')?.value || undefined;
+        const soldInClinic = row.querySelector('.presc-soldInClinic')?.checked || false;
+        const dispensingQuantity = parseInt(row.querySelector('.presc-dispQty')?.value) || 1;
         if (medicineName) {
-          prescriptions.push({ medicineName, dose, doseQuantity, doseUnit, frequency, duration });
+          prescriptions.push({ medicineName, dose, doseQuantity, doseUnit, frequency, duration, supplyId, soldInClinic, dispensingQuantity });
         }
       });
       
@@ -1925,7 +1936,7 @@ function showAddRecordModal() {
     }
   });
   
-  // Prescription rows - PURE medical
+  // Prescription rows - with optional stock sell
   let prescCount = 0;
   document.getElementById('add-prescription-btn')?.addEventListener('click', () => {
     const container = document.getElementById('prescriptions-container');
@@ -1940,6 +1951,17 @@ function showAddRecordModal() {
         <input class="form-input presc-freq" placeholder="Frecuencia (ej: cada 8hs)" style="flex:1;min-width:110px">
         <input class="form-input presc-dur" placeholder="Duración (ej: 7 días)" style="flex:1;min-width:100px">
         <button type="button" class="btn btn-danger btn-sm">X</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+        <select class="form-input presc-supply" style="flex:2;min-width:140px">
+          <option value="">Vincular insumo (opcional)</option>
+          ${suppliesCache.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--text-xs);white-space:nowrap">
+          <input type="checkbox" class="presc-soldInClinic" style="width:auto">
+          Vender en clínica
+        </label>
+        <input class="form-input presc-dispQty" type="number" placeholder="Cant." value="1" min="1" style="width:55px" title="Cantidad a dispensar">
       </div>
     `;
     container.appendChild(div);
@@ -2001,6 +2023,30 @@ function showAddRecordModal() {
     div.querySelector('.btn-danger').addEventListener('click', () => { div.remove(); recalcRecordTotal(); });
     priceInput.addEventListener('input', recalcRecordTotal);
     div.querySelector('.proc-quantity').addEventListener('input', recalcRecordTotal);
+
+    supplySel.addEventListener('change', () => {
+      const selectedSupplyId = supplySel.value;
+      if (!selectedSupplyId) return;
+      const existingRow = document.querySelector(`.supply-item-row[data-supply-id="${selectedSupplyId}"]`);
+      if (existingRow) {
+        existingRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      const supply = suppliesCache.find(s => s.id === selectedSupplyId);
+      if (!supply) return;
+      document.getElementById('add-supply-item-btn')?.click();
+      const newRow = container.parentElement?.querySelector('.supply-item-row:last-child') || document.querySelector('.supply-item-row:last-child');
+      if (newRow) {
+        const descInput = newRow.querySelector('.si-desc');
+        const priceInput = newRow.querySelector('.si-price');
+        const qtyInput = newRow.querySelector('.si-qty');
+        if (descInput) descInput.value = supply.name;
+        if (priceInput) priceInput.value = supply.salePrice || supply.unitPrice || 0;
+        if (qtyInput) qtyInput.value = 1;
+        newRow.dataset.supplyId = selectedSupplyId;
+        if (priceInput) priceInput.dispatchEvent(new Event('input'));
+      }
+    });
   });
   
   // Supply items for billing - from supplies
@@ -2046,6 +2092,7 @@ function showAddRecordModal() {
           priceInput.value = opt.dataset.price;
           div.dataset.supplyId = opt.dataset.id;
           dropdown.style.display = 'none';
+          priceInput.dispatchEvent(new Event('input'));
           recalcRecordTotal();
         });
       });

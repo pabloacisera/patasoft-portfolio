@@ -120,14 +120,7 @@ export class SuppliesService {
   async decreaseStock(id: string, companyId: string, qty: number, dispensingQty?: number) {
     const supply = await this.findOne(id, companyId);
 
-    let stockToDiscount = qty;
-
-    // Si vienen unidades de despacho Y el supply tiene configuración de unidades
-    if (dispensingQty && supply.unitsPerStock && supply.unitsPerStock > 1) {
-      // Calcular cuántas unidades de stock se consumen
-      // Redondear hacia arriba: no podés usar menos de 1 unidad de stock
-      stockToDiscount = Math.ceil(dispensingQty / supply.unitsPerStock);
-    }
+    let stockToDiscount = dispensingQty || qty;
 
     const newQty = Math.max(0, supply.quantity - stockToDiscount);
 

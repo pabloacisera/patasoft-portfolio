@@ -128,6 +128,13 @@ export class PaymentsService {
       }
     }
 
+    // Generar comprobante si el pago ya está cobrado
+    if (payment.status === 'PAID' && !payment.cloudinaryUrl) {
+      this.pdfService.generateAndStoreReceipt(payment.id, companyId).catch(e =>
+        this.logger.error('Error generando comprobante al crear pago', e)
+      );
+    }
+
     return payment;
   }
 
@@ -151,7 +158,10 @@ export class PaymentsService {
         where: { paymentId: id }
       });
       if (!existingMovement) {
-        await this.cashService.createFromPayment(companyId, id, updated.paidAmount || updated.totalAmount);
+        const paymentMethod = dto.method || payment.method;
+        if (paymentMethod === 'CASH') {
+          await this.cashService.createFromPayment(companyId, id, updated.paidAmount || updated.totalAmount);
+        }
       }
       if (updated.debt) {
         await this.prisma.debt.update({

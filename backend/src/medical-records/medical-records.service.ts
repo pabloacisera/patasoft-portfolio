@@ -107,7 +107,7 @@ export class MedicalRecordsService {
           const pi = await this.prisma.priceItem.findUnique({ where: { id: proc.priceItemId } });
           unitPrice = pi?.price || 0;
         }
-        if (proc.supplyId) {
+        if (!unitPrice && proc.supplyId) {
           const supply = await this.prisma.supply.findUnique({ where: { id: proc.supplyId } });
           if (supply?.salePrice && supply?.unitsPerStock) {
             unitPrice = supply.salePrice / supply.unitsPerStock;
@@ -126,7 +126,7 @@ export class MedicalRecordsService {
           });
         }
       }
-      
+
       for (const pres of (dto.prescriptions || [])) {
         if (!pres.soldInClinic || !pres.supplyId) continue;
         const supply = await this.prisma.supply.findUnique({ where: { id: pres.supplyId } });
@@ -143,17 +143,17 @@ export class MedicalRecordsService {
           itemType: 'SUPPLY',
         });
       }
+    }
 
-      for (const item of (dto.supplyItems || [])) {
-        totalAmount += item.totalPrice || (item.unitPrice * item.quantity);
-        paymentItems.push({
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice || (item.unitPrice * item.quantity),
-          itemType: 'SUPPLY',
-        });
-      }
+    for (const item of (dto.supplyItems || [])) {
+      totalAmount += item.totalPrice || (item.unitPrice * item.quantity);
+      paymentItems.push({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice || (item.unitPrice * item.quantity),
+        itemType: 'SUPPLY',
+      });
     }
 
     // Transacción atómica
@@ -208,9 +208,7 @@ export class MedicalRecordsService {
         if (!proc.supplyId) continue;
         const supply = await tx.supply.findUnique({ where: { id: proc.supplyId } });
         if (!supply) continue;
-        const stockUnitsUsed = supply.unitsPerStock
-          ? Math.ceil((proc.quantity || 1) / supply.unitsPerStock)
-          : (proc.quantity || 1);
+        const stockUnitsUsed = proc.quantity || 1;
         await tx.supply.update({
           where: { id: proc.supplyId },
           data: { quantity: { decrement: stockUnitsUsed } },
@@ -223,10 +221,9 @@ export class MedicalRecordsService {
         const supply = await tx.supply.findUnique({ where: { id: pres.supplyId } });
         if (!supply) continue;
         const qty = pres.dispensingQuantity || pres.quantity || 1;
-        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty / supply.unitsPerStock) : qty;
         await tx.supply.update({
           where: { id: pres.supplyId },
-          data: { quantity: { decrement: stockUnitsUsed } },
+          data: { quantity: { decrement: qty } },
         });
       }
 

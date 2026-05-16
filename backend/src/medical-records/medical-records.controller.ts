@@ -19,11 +19,6 @@ export class MedicalRecordsController {
     return this.medicalRecordsService.findAll(user.companyId, query);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.medicalRecordsService.findOne(id, user.companyId);
-  }
-
   @Post()
   create(@Body() dto: CreateMedicalRecordDto, @CurrentUser() user: any) {
     return this.medicalRecordsService.create(user.companyId, dto);
@@ -52,28 +47,39 @@ export class MedicalRecordsController {
   @Get(':id/pdf')
   @UseGuards(JwtAuthGuard)
   async getPrescriptionPdf(@Param('id') id: string, @CurrentUser() user: any, @Res() res: Response) {
-    await this.medicalRecordsService.findOne(id, user.companyId);
-    const pdfBuffer = await this.medicalRecordsService.generateAndStorePrescription(id, user.companyId);
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=receta_${id.slice(-6)}.pdf`,
-      'Content-Length': pdfBuffer.byteLength,
-    });
-    return res.end(pdfBuffer);
+    try {
+      await this.medicalRecordsService.findOne(id, user.companyId);
+      const pdfBuffer = await this.medicalRecordsService.generateAndStorePrescription(id, user.companyId);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename=receta_${id.slice(-6)}.pdf`,
+        'Content-Length': pdfBuffer.byteLength,
+      });
+      return res.end(pdfBuffer);
+    } catch (e) {
+      res.status(500).json({ message: 'Error generando PDF de receta. Verifique que Chromium esté instalado en el servidor.' });
+    }
   }
 
   @Get(':id/prescription/url')
   @UseGuards(JwtAuthGuard)
   async getPrescriptionUrl(@Param('id') id: string, @CurrentUser() user: any) {
-    const record = await this.medicalRecordsService.findOne(id, user.companyId);
-    if (!record) throw new NotFoundException('Historial no encontrado');
-
-    const doc = await this.medicalRecordsService.findPrescriptionDocument(id, user.companyId);
-    if (!doc) {
-      await this.medicalRecordsService.generateAndStorePrescription(id, user.companyId);
-      const newDoc = await this.medicalRecordsService.findPrescriptionDocument(id, user.companyId);
-      return { url: newDoc?.cloudinaryUrl || null };
+    try {
+      await this.medicalRecordsService.findOne(id, user.companyId);
+      const doc = await this.medicalRecordsService.findPrescriptionDocument(id, user.companyId);
+      if (!doc) {
+        await this.medicalRecordsService.generateAndStorePrescription(id, user.companyId);
+        const newDoc = await this.medicalRecordsService.findPrescriptionDocument(id, user.companyId);
+        return { url: newDoc?.cloudinaryUrl || null };
+      }
+      return { url: doc.cloudinaryUrl };
+    } catch (e) {
+      throw new NotFoundException('No se pudo generar la URL de la receta');
     }
-    return { url: doc.cloudinaryUrl };
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.medicalRecordsService.findOne(id, user.companyId);
   }
 }
