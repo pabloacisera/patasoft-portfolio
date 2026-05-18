@@ -221,9 +221,10 @@ export class MedicalRecordsService {
         const supply = await tx.supply.findUnique({ where: { id: pres.supplyId } });
         if (!supply) continue;
         const qty = pres.dispensingQuantity || pres.quantity || 1;
+        const newQty = Math.max(0, supply.quantity - qty);
         await tx.supply.update({
           where: { id: pres.supplyId },
-          data: { quantity: { decrement: qty } },
+          data: { quantity: newQty },
         });
       }
 

@@ -64,6 +64,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       );
     }
 
+    // Rutas permitidas con suscripción vencida (renovar, consultar estado, exportar datos)
+    const subscriptionExemptRoutes = [
+      '/api/v1/companies/me',
+      '/api/v1/subscriptions/status',
+      '/api/v1/subscriptions/checkout',
+      '/api/v1/auth/me',
+      '/api/v1/data/export-all',
+    ];
+    if (subscriptionExemptRoutes.some(p => request.path.startsWith(p))) {
+      return true;
+    }
+
     // Check de suscripción expirada en cada request
     try {
       const subscription = await this.prisma.subscription.findUnique({

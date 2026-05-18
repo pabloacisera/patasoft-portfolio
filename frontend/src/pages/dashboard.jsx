@@ -1966,6 +1966,14 @@ function showAddRecordModal() {
     `;
     container.appendChild(div);
     div.querySelector('.btn-danger').addEventListener('click', () => div.remove());
+    
+    const supplySelect = div.querySelector('.presc-supply');
+    const soldInClinicCheck = div.querySelector('.presc-soldInClinic');
+    supplySelect.addEventListener('change', () => {
+      if (supplySelect.value) {
+        soldInClinicCheck.checked = true;
+      }
+    });
   });
   
   // Procedure rows - from price items
@@ -2418,11 +2426,15 @@ async function showPaymentDetail(paymentId) {
       actionsHTML += `<button class="btn btn-primary" id="pay-checkout-link">Enviar link de pago</button>`;
     } else if (method === 'TRANSFER') {
       actionsHTML += `<button class="btn btn-primary" id="pay-confirm-transfer">Confirmar transferencia recibida</button>`;
-    } else {
+    } else if (!isElectronic) {
       actionsHTML += `<button class="btn btn-primary" id="pay-confirm-generic">Confirmar cobro</button>`;
     }
     if (isElectronic && !mpConnected) {
-      actionsHTML += `<p style="font-size:var(--text-xs);color:var(--color-danger);margin-top:8px">MercadoPago no conectado. Configure en Configuración > MercadoPago.</p>`;
+      actionsHTML += `
+      <div style="padding:12px;background:var(--color-background-danger);border:1px solid var(--color-border-danger);border-radius:var(--border-radius-md)">
+        <p style="font-size:var(--text-sm);color:var(--color-danger);margin:0 0 4px;font-weight:500">MercadoPago no conectado</p>
+        <p style="font-size:var(--text-xs);color:var(--color-danger);margin:0">Para cobrar con este método configurá tu cuenta en <strong>Ajustes → MercadoPago</strong>. Mientras tanto, podés cambiar el método de pago.</p>
+      </div>`;
     }
   }
   
@@ -2434,6 +2446,10 @@ async function showPaymentDetail(paymentId) {
     </table>
   ` : '';
   
+  const receiptHTML = payment.status === 'PAID'
+    ? `<button class="btn btn-outline btn-sm" id="pay-download-receipt-btn">🧾 Descargar comprobante</button>`
+    : '';
+
   const deleteHTML = `<button class="btn btn-outline btn-sm" id="pay-delete-btn" style="color:var(--color-danger);border-color:var(--color-danger)">Eliminar cobro</button>`;
   
   openModal({
@@ -2449,7 +2465,10 @@ async function showPaymentDetail(paymentId) {
       ${payment.notes ? `<div class="detail-row"><span>Notas</span><span>${payment.notes}</span></div>` : ''}
       ${itemsHTML}
       ${actionsHTML ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">${actionsHTML}</div>` : ''}
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">${deleteHTML}</div>
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+  <span>${receiptHTML}</span>
+  ${deleteHTML}
+</div>
     `,
     showCancel: false,
     showConfirm: true,
@@ -2520,6 +2539,21 @@ async function showPaymentDetail(paymentId) {
         renderPaymentsPage(document.getElementById('page-content'));
       } catch (e) {
         showToast(e.message || 'Error eliminando cobro', 'error');
+      }
+    });
+
+    document.getElementById('pay-download-receipt-btn')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        const blob = await api.getBlob(`/payments/${paymentId}/receipt`);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `comprobante-${paymentId.slice(-6)}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        showToast('Error al generar el comprobante', 'error');
       }
     });
   }, 100);

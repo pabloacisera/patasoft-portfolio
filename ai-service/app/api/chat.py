@@ -121,7 +121,9 @@ async def chat(request: ChatRequest):
         llm = get_llm(request.model)
         
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-        
+        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+        from langchain.agents import AgentExecutor, create_openai_functions_agent
+
         from app.memory import get_company_memory
         from app.tools import (
             get_pets_tool,
@@ -129,6 +131,7 @@ async def chat(request: ChatRequest):
             get_medical_records_tool,
             get_supplies_tool,
             get_debts_tool,
+            get_payments_tool,
         )
         
         memory = get_company_memory(request.company_id)
@@ -159,52 +162,64 @@ async def chat(request: ChatRequest):
         if last_message:
             chat_messages.append(HumanMessage(content=last_message))
         
-        needs_tools = any(keyword in last_message.lower() for keyword in [
-            "mascota", "mascotas", "cliente", "clientes", "historial", "médico",
-            "insumo", "insumos", "stock", "medicamento", "deuda", "deudas",
-            "cuánto", "cuántos", "listado", "buscar", "busca",
+        from app.tools import (
+            get_pets_tool,
+            get_clients_tool,
+            get_medical_records_tool,
+            get_supplies_tool,
+            get_debts_tool,
+            get_payments_tool,
+        )
+
+        tools = [
+            get_pets_tool,
+            get_clients_tool,
+            get_medical_records_tool,
+            get_supplies_tool,
+            get_debts_tool,
+            get_payments_tool,
+        ]
+
+        agent_prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
         ])
-        
-        if needs_tools:
-            from langchain.agents import AgentExecutor, create_openai_functions_agent
-            
-            tools = []
-            if request.company_id:
-                tools = [
-                    get_pets_tool,
-                    get_clients_tool,
-                    get_supplies_tool,
-                    get_debts_tool,
-                ]
-            
-            if tools and request.messages:
-                from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-                from langchain.agents.format_tools import format_to_openai_functions
-                
-                prompt = ChatPromptTemplate.from_messages([
-                    SystemMessage(content=system_prompt),
-                    MessagesPlaceholder(variable_name="chat_history", optional=True),
-                    HumanMessage(content=request.messages[-1].content if request.messages else ""),
-                ])
-                
-                tools_formatted = format_to_openai_functions(tools)
-                
-                try:
-                    from langchain_openai import ChatOpenAI
-                    llm_with_tools = get_llm(request.model)
-                    llm_with_tools.bind(functions=tools_formatted)
-                    
-                    response = llm.invoke(chat_messages)
-                except Exception as e:
-                    response = llm.invoke(chat_messages)
-        else:
-            response = llm.invoke(chat_messages)
+
+        agent = create_openai_functions_agent(
+            llm=get_llm(request.model),
+            tools=tools,
+            prompt=agent_prompt,
+        )
+
+        agent_executor = AgentExecutor(
+            agent=agent,
+            tools=tools,
+            verbose=False,
+            handle_parsing_errors=True,
+            max_iterations=5,
+        )
+
+        chat_history_for_agent = []
+        for msg in request.messages[:-1]:
+            if msg.role == "user":
+                chat_history_for_agent.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                chat_history_for_agent.append(AIMessage(content=msg.content))
+
+        agent_result = agent_executor.invoke({
+            "input": last_message,
+            "chat_history": chat_history_for_agent,
+        })
+
+        response_text = agent_result.get("output", "No pude obtener una respuesta.")
         
         memory.add_message("user", last_message, request.session_id)
-        memory.add_message("assistant", response.content, request.session_id)
-        
+        memory.add_message("assistant", response_text, request.session_id)
+
         return ChatResponse(
-            message=ChatMessage(role="assistant", content=response.content),
+            message=ChatMessage(role="assistant", content=response_text),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -247,20 +262,65 @@ async def build_chat_messages(request: ChatRequest) -> tuple:
 async def chat_stream(request: ChatRequest):
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
-            from langchain_core.messages import HumanMessage
+            from langchain_core.messages import HumanMessage, AIMessage
+            from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+            from langchain.agents import AgentExecutor, create_openai_functions_agent
             from app.memory import get_company_memory
+            from app.tools import (
+                get_pets_tool, get_clients_tool, get_medical_records_tool,
+                get_supplies_tool, get_debts_tool, get_payments_tool,
+            )
 
-            llm = get_llm(request.model)
             chat_messages, last_message = await build_chat_messages(request)
+            memory = get_company_memory(request.company_id)
+            history_messages = memory.get_history(request.session_id)
 
-            stream = llm.stream(chat_messages)
+            system_prompt = chat_messages[0].content if chat_messages else ""
+
+            agent_prompt = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                MessagesPlaceholder(variable_name="chat_history", optional=True),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ])
+
+            tools = [
+                get_pets_tool, get_clients_tool, get_medical_records_tool,
+                get_supplies_tool, get_debts_tool, get_payments_tool,
+            ]
+
+            agent = create_openai_functions_agent(
+                llm=get_llm(request.model),
+                tools=tools,
+                prompt=agent_prompt,
+            )
+
+            agent_executor = AgentExecutor(
+                agent=agent,
+                tools=tools,
+                verbose=False,
+                handle_parsing_errors=True,
+                max_iterations=5,
+            )
+
+            chat_history_for_agent = [
+                msg for msg in chat_messages[1:-1]
+            ]
+
             full_response = ""
+            result = agent_executor.invoke({
+                "input": last_message,
+                "chat_history": chat_history_for_agent,
+            })
+            full_response = result.get("output", "No pude obtener una respuesta.")
 
-            for chunk in stream:
-                if hasattr(chunk, 'content') and chunk.content:
-                    full_response += chunk.content
-                    yield f"data: {json.dumps({'content': chunk.content})}\n\n"
+            chunk_size = 10
+            for i in range(0, len(full_response), chunk_size):
+                chunk = full_response[i:i+chunk_size]
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
 
+            memory.add_message("user", last_message, request.session_id)
+            memory.add_message("assistant", full_response, request.session_id)
             yield f"data: {json.dumps({'done': True, 'full': full_response})}\n\n"
 
         except Exception as e:

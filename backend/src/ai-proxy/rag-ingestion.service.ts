@@ -20,6 +20,7 @@ export class RagIngestionService {
       supplies: 0,
       medicalRecords: 0,
       prices: 0,
+      payments: 0,
       company: false,
     };
 
@@ -27,7 +28,7 @@ export class RagIngestionService {
       progressCallback?.({ type, current, total, message, category });
     };
 
-    const totalCategories = 6;
+    const totalCategories = 7;
     let completedCategories = 0;
 
     const sendCategory = (categoryName: string, count: number) => {
@@ -67,7 +68,9 @@ export class RagIngestionService {
       results.pets = pets.length;
       if (pets.length > 0) {
         for (const p of pets) {
-          const ownerName = p.client?.name || 'N/A';
+          const ownerName = p.client
+          ? `${p.client.name} ${p.client.lastName || ''}`.trim()
+          : 'N/A';
           let ageText = 'N/A';
           if (p.birthDate) {
             const ageMs = Date.now() - p.birthDate.getTime();
@@ -107,19 +110,45 @@ export class RagIngestionService {
 
       const medicalRecords = await this.prisma.medicalRecord.findMany({
         where: { pet: { companyId } },
-        include: { pet: true },
+        include: { pet: { include: { client: true } } },
         take: 100,
       });
       results.medicalRecords = medicalRecords.length;
       if (medicalRecords.length > 0) {
         for (const r of medicalRecords) {
           allDocs.push({
-            content: `Historia médica de ${r.pet?.name || 'mascota'}. Fecha: ${r.date}. Motivo: ${r.visitReason}. Diagnóstico: ${r.diagnosis || 'N/A'}. Tratamiento: ${r.treatment || 'N/A'}. Observaciones: ${r.observations || 'Sin observaciones'}.`,
+            content: `Historia médica de ${r.pet?.name || 'mascota'} (dueño: ${r.pet?.client?.name || 'N/A'} ${r.pet?.client?.lastName || ''}). Fecha: ${r.date}. Motivo: ${r.visitReason}. Diagnóstico: ${r.diagnosis || 'N/A'}. Tratamiento: ${r.treatment || 'N/A'}. Observaciones: ${r.observations || 'Sin observaciones'}.`,
             metadata: { source: 'medicalrecord', recordId: r.id, petId: r.petId, date: r.date }
           });
         }
       }
       sendCategory('Historiales médicos', medicalRecords.length);
+
+      // Ingesta de pagos/cobros
+      const payments = await this.prisma.payment.findMany({
+        where: { companyId, isDeleted: false },
+        include: {
+          client: true,
+          pet: true,
+          items: true,
+        },
+        take: 200,
+        orderBy: { createdAt: 'desc' },
+      });
+      results.payments = payments.length;
+      if (payments.length > 0) {
+        for (const pay of payments) {
+          const clientName = pay.client ? `${pay.client.name} ${pay.client.lastName || ''}`.trim() : 'N/A';
+          const petName = pay.pet?.name || 'N/A';
+          const itemsList = pay.items.map(i => `${i.description} x${i.quantity} $${i.totalPrice}`).join(', ');
+          const statusLabel = { PENDING: 'Pendiente', PAID: 'Pagado', CANCELLED: 'Cancelado', OVERDUE: 'Vencido' }[pay.status] || pay.status;
+          allDocs.push({
+            content: `Cobro/Pago: cliente ${clientName}, mascota ${petName}. Total: $${pay.totalAmount}. Estado: ${statusLabel}. Método: ${pay.method || 'N/A'}. Fecha: ${pay.createdAt.toISOString().split('T')[0]}. Items: ${itemsList || 'Sin detalle'}.`,
+            metadata: { source: 'payment', paymentId: pay.id, clientId: pay.clientId, petId: pay.petId }
+          });
+        }
+      }
+      sendCategory('Cobros y pagos', payments.length);
 
       if (allDocs.length > 0) {
         await this.aiProxy.sendToRag(companyId, allDocs, (p) => {

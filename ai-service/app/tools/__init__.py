@@ -378,11 +378,122 @@ class GetDebtsTool(BaseTool):
             db.close()
 
 
+class GetPaymentsInput(BaseModel):
+    company_id: str = Field(..., description="ID de la empresa")
+    pet_name: Optional[str] = Field(None, description="Nombre de la mascota para filtrar")
+    client_name: Optional[str] = Field(None, description="Nombre del cliente para filtrar")
+    status: Optional[str] = Field(None, description="Estado del pago: PENDING, PAID, CANCELLED, OVERDUE")
+    limit: int = Field(10, description="Límite de resultados (default 10)")
+
+
+class GetPaymentsTool(BaseTool):
+    name = "get_payments"
+    description = """Busca pagos, cobros y facturación de la empresa.
+    - company_id: ID de la empresa (requerido)
+    - pet_name: nombre de la mascota para filtrar sus cobros
+    - client_name: nombre del cliente para filtrar sus cobros
+    - status: PENDING (pendiente), PAID (pagado), CANCELLED (cancelado), OVERDUE (vencido)
+    Úsala para preguntas sobre: cuánto costó una consulta, cuánto gastó un cliente, pagos pendientes, historial de cobros.
+    Returns lista de pagos con sus items, montos y métodos de pago."""
+
+    args_schema: Type[BaseModel] = GetPaymentsInput
+
+    def _run(
+        self,
+        company_id: str,
+        pet_name: Optional[str] = None,
+        client_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 10,
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> Dict[str, Any]:
+        db = next(get_db())
+        try:
+            query = """
+                SELECT
+                    pay.id,
+                    pay."totalAmount",
+                    pay.status,
+                    pay.method,
+                    pay."paidAt",
+                    pay."createdAt",
+                    c.name as client_name,
+                    c.last_name as client_last_name,
+                    p.name as pet_name,
+                    p.species as pet_species
+                FROM "Payment" pay
+                LEFT JOIN "Client" c ON pay."clientId" = c.id
+                LEFT JOIN "Pet" p ON pay."petId" = p.id
+                WHERE pay."companyId" = :company_id
+            """
+            params: Dict[str, Any] = {"company_id": company_id, "limit": limit}
+
+            if status:
+                query += " AND pay.status = :status"
+                params["status"] = status
+
+            if pet_name:
+                query += " AND LOWER(p.name) LIKE LOWER(:pet_name)"
+                params["pet_name"] = f"%{pet_name}%"
+
+            if client_name:
+                query += " AND (LOWER(c.name) LIKE LOWER(:client_name) OR LOWER(c.last_name) LIKE LOWER(:client_name))"
+                params["client_name"] = f"%{client_name}%"
+
+            query += " ORDER BY pay.\"createdAt\" DESC LIMIT :limit"
+
+            result = db.execute(text(query), params)
+            payments = []
+            for row in result:
+                payment_id = row.id
+
+                items_query = """
+                    SELECT description, quantity, "unitPrice", "totalPrice"
+                    FROM "PaymentItem"
+                    WHERE "paymentId" = :payment_id
+                """
+                items_result = db.execute(text(items_query), {"payment_id": payment_id})
+                items = []
+                for item in items_result:
+                    items.append({
+                        "description": item.description,
+                        "quantity": item.quantity,
+                        "unit_price": float(item.unitPrice) if item.unitPrice else 0,
+                        "total_price": float(item.totalPrice) if item.totalPrice else 0,
+                    })
+
+                payments.append({
+                    "id": payment_id,
+                    "total_amount": float(row.total_amount) if row.total_amount else 0,
+                    "status": row.status,
+                    "method": row.method,
+                    "paid_at": row.paid_at.isoformat() if row.paid_at else None,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "client": f"{row.client_name or ''} {row.client_last_name or ''}".strip() or None,
+                    "pet": f"{row.pet_name or ''} ({row.pet_species or ''})".strip() if row.pet_name else None,
+                    "items": items,
+                })
+
+            total_paid = sum(p["total_amount"] for p in payments if p["status"] == "PAID")
+
+            return {
+                "success": True,
+                "count": len(payments),
+                "total_paid_in_results": total_paid,
+                "payments": payments,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+        finally:
+            db.close()
+
+
 get_pets_tool = GetPetsTool()
 get_clients_tool = GetClientsTool()
 get_medical_records_tool = GetMedicalRecordsTool()
 get_supplies_tool = GetSuppliesTool()
 get_debts_tool = GetDebtsTool()
+get_payments_tool = GetPaymentsTool()
 
 __all__ = [
     "get_pets_tool",
@@ -390,4 +501,5 @@ __all__ = [
     "get_medical_records_tool",
     "get_supplies_tool",
     "get_debts_tool",
+    "get_payments_tool",
 ]

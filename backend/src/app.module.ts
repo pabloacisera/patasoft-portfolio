@@ -29,6 +29,7 @@ import { ConnectionsModule } from './connections/connections.module';
 import { CashRegisterModule } from './cash-register/cash-register.module';
 import { SuperAdminModule } from './superadmin/superadmin.module';
 import { SupplyPurchasesModule } from './supply-purchases/supply-purchases.module';
+import { DataModule } from './data/data.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { SupplyPurchasesModule } from './supply-purchases/supply-purchases.modul
     CashRegisterModule,
     SuperAdminModule,
     SupplyPurchasesModule,
+    DataModule,
   ],
 })
 export class AppModule {}

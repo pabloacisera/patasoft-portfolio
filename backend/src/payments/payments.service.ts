@@ -140,6 +140,20 @@ export class PaymentsService {
 
   async update(id: string, companyId: string, dto: UpdatePaymentDto) {
     const payment = await this.findOne(id, companyId);
+
+    // Validar que no se pueda marcar como PAID un pago electrónico sin MP configurado
+    if (dto.status === 'PAID' && ['MP_QR', 'MP_CHECKOUT'].includes(payment.method as string)) {
+      const companyConfig = await this.prisma.companyConfig.findUnique({
+        where: { companyId },
+        select: { mpAccessToken: true },
+      });
+      if (!companyConfig?.mpAccessToken) {
+        throw new BadRequestException(
+          'No se puede confirmar el pago: MercadoPago no está configurado para esta empresa. Configurá la cuenta en Ajustes > MercadoPago o cambiá el método de pago.'
+        );
+      }
+    }
+
     const updated = await this.prisma.payment.update({ 
       where: { id }, 
       data: { 

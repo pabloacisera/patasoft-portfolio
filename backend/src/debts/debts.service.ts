@@ -70,6 +70,16 @@ export class DebtsService {
           ...(isPartial ? {} : { status: 'PAID', paidAt: new Date() })
         }
       });
+
+      // Registrar movimiento de caja si es pago completo y no existe ya
+      if (!isPartial) {
+        const existingMovement = await this.prisma.cashMovement.findFirst({
+          where: { paymentId: debt.paymentId }
+        });
+        if (!existingMovement) {
+          await this.cashService.createFromPayment(companyId, debt.paymentId, amountToPay);
+        }
+      }
     }
     
     this.logger.log(`Deuda ${id} pago procesado: $${amountToPay}`);

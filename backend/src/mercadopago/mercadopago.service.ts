@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { PdfService } from '../documents/pdf.service';
+import { CashRegisterService } from '../cash-register/cash-register.service';
+import { EventsGateway } from '../events/events.gateway';
 import { CreatePreferenceDto, QrPaymentDto, WebhookDto } from './dto/mercadopago.dto';
 
 const MP_BASE_URL = 'https://api.mercadopago.com';
@@ -12,6 +15,9 @@ export class MercadopagoService {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    private pdfService: PdfService,
+    private cashService: CashRegisterService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   async createPreference(companyId: string, dto: CreatePreferenceDto) {
@@ -256,6 +262,34 @@ export class MercadopagoService {
                     data: { status: 'PAID', paidAt: new Date() },
                   });
                 }
+                // Registrar movimiento de caja
+                const existingMovement = await this.prisma.cashMovement.findFirst({
+                  where: { paymentId: externalRef }
+                });
+                if (!existingMovement) {
+                  await this.prisma.cashMovement.create({
+                    data: {
+                      companyId,
+                      type: 'INCOME',
+                      amount: payment.totalAmount,
+                      reason: 'Pago recibido vía MercadoPago',
+                      paymentId: externalRef,
+                      date: new Date(),
+                    },
+                  });
+                }
+
+                // Generar comprobante PDF
+                this.pdfService.generateAndStoreReceipt(externalRef, companyId).catch(e =>
+                  this.logger.error('Error generando comprobante desde webhook MP', e)
+                );
+
+                // Notificar en tiempo real
+                this.eventsGateway.emitToCompany(companyId, 'payment:confirmed', {
+                  paymentId: externalRef,
+                  status: 'PAID',
+                });
+
                 this.logger.log(`Pago ${externalRef} aprobado para empresa ${companyId}`);
               } else if (status === 'pending') {
                 await this.prisma.payment.update({
