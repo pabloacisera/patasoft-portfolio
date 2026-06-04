@@ -1,0 +1,6 @@
+{
+  "name": "@patasoft/shared",
+  "version": "1.0.0",
+  "main": "src/types/enums.ts",
+  "types": "src/types/enums.ts"
+}

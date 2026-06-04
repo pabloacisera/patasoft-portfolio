@@ -1,0 +1,32 @@
+graph TB
+    subgraph "Base Compartida PostgreSQL"
+        subgraph "Company A"
+            C1[Company id: comp-a]
+            CL1[Clientes companyId: comp-a]
+            P1[Mascotas companyId: comp-a]
+            S1[Insumos companyId: comp-a]
+            PAY1[Pagos companyId: comp-a]
+        end
+
+        subgraph "Company B"
+            C2[Company id: comp-b]
+            CL2[Clientes companyId: comp-b]
+            P2[Mascotas companyId: comp-b]
+            S2[Insumos companyId: comp-b]
+            PAY2[Pagos companyId: comp-b]
+        end
+
+        subgraph "Tabla Compartida"
+            LANG[langchain_vectors - company_id por tenant]
+        end
+    end
+
+    subgraph "Aislamiento"
+        RULE[Regla: Toda query WHERE companyId = :currentCompanyId]
+        GUARD[JwtAuthGuard inyecta companyId en cada request]
+    end
+
+    RULE --> GUARD
+    GUARD --> C1
+    GUARD --> C2
+    GUARD --> LANG

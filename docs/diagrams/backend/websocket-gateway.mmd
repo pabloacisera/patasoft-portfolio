@@ -1,0 +1,30 @@
+sequenceDiagram
+    participant FE as Frontend Socket.IO
+    participant GW as EventsGateway
+    participant AUTH as JwtAuthGuard
+    participant BE as Backend Services
+    participant REDIS as Redis
+
+    FE->>GW: connect(auth:{token})
+    GW->>AUTH: Verifica JWT
+    AUTH-->>GW: user + companyId
+    GW->>GW: socket.join("company:{companyId}")
+    GW->>GW: socket.join("user:{userId}")
+    GW-->>FE: connected
+
+    Note over FE,REDIS: Emitir a empresa
+    BE->>GW: emitToCompany(companyId, event, data)
+    GW->>GW: io.to("company:X").emit(event, data)
+    GW-->>FE: event + data
+
+    Note over FE,REDIS: Emitir a usuario
+    BE->>GW: emitToUser(userId, event, data)
+    GW->>GW: io.to("user:X").emit(event, data)
+    GW-->>FE: event + data
+
+    Note over FE,REDIS: Eventos del sistema
+    BE->>GW: notification:new
+    BE->>GW: document:ready
+    BE->>GW: stock:alert
+    BE->>GW: debt:alert
+    BE->>GW: company:blocked

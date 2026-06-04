@@ -1,8 +1,10 @@
 version: '3.9'
 
-# Docker Compose para producción
-# Nota: PostgreSQL y Redis se usan desde Render
-# Este archivo es para referencia y potenciales despliegues futuros
+# ⚠️ OBSOLETO - No usar.
+# El deployment en producción se maneja via render.yaml (Render.com).
+# Los Dockerfiles individuales (backend/Dockerfile, frontend/Dockerfile) funcionan correctamente
+# y pueden usarse para builds locales o CI/CD alternativos.
+# Este compose referenciaba rutas de Dockerfile que ya no existen.
 
 services:
   # Backend NestJS

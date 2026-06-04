@@ -79,6 +79,8 @@ services:
           name: patasoft-ai
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: AI_SERVICE_API_KEY
+        sync: false
       # Mailjet
       - key: MJ_APIKEY
         sync: false
@@ -110,6 +112,8 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GROQ_API_KEY
+        sync: false
+      - key: AI_SERVICE_API_KEY
         sync: false
     autoDeploy: true
 

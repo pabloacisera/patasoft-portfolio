@@ -1,0 +1,86 @@
+graph LR
+    subgraph "UserRole"
+        UR1[GUEST]
+        UR2[USER]
+        UR3[ADMIN_COMPANY]
+        UR4[STAFF]
+        UR5[SUPER_ADMIN]
+    end
+
+    subgraph "SubscriptionPlan"
+        SP1[TRIAL]
+        SP2[MONTHLY]
+        SP3[YEARLY]
+        SP4[TEST]
+    end
+
+    subgraph "SubscriptionStatus"
+        SS1[TRIAL]
+        SS2[ACTIVE]
+        SS3[EXPIRED]
+        SS4[BLOCKED]
+        SS5[CANCELLED]
+    end
+
+    subgraph "PaymentStatus"
+        PS1[PENDING]
+        PS2[PARTIAL]
+        PS3[PAID]
+        PS4[DEFERRED]
+        PS5[CANCELLED]
+        PS6[OVERDUE]
+    end
+
+    subgraph "PaymentMethod"
+        PM1[CASH]
+        PM2[TRANSFER]
+        PM3[MP_QR]
+        PM4[MP_CHECKOUT]
+        PM5[CHECK]
+        PM6[OTHER]
+    end
+
+    subgraph "DebtStatus"
+        DS1[PENDING]
+        DS2[PAID]
+        DS3[OVERDUE]
+        DS4[CANCELLED]
+    end
+
+    subgraph "ConnectionStatus"
+        CS1[PENDING]
+        CS2[ACCEPTED]
+        CS3[REJECTED]
+        CS4[BLOCKED]
+    end
+
+    subgraph "CashMovementType"
+        CMT1[INCOME]
+        CMT2[EXPENSE]
+    end
+
+    subgraph "DocumentType"
+        DT1[PAYMENT_RECEIPT]
+        DT2[DEBT_RECORD]
+        DT3[SUPPLY_EXCEL]
+        DT4[PRICE_LIST]
+        DT5[RAG_DOCUMENT]
+        DT6[EXPORT_EXCEL]
+        DT7[EXPORT_PDF]
+        DT8[ACCOUNT_STATEMENT]
+    end
+
+    subgraph "NotificationType"
+        NT1[STOCK_LOW]
+        NT2[DEBT_DUE]
+        NT3[DEBT_OVERDUE]
+        NT4[CONNECTION_REQUEST]
+        NT5[CONNECTION_ACCEPTED]
+        NT6[CONNECTION_REJECTED]
+        NT7[SUBSCRIPTION_EXPIRING]
+        NT8[SUBSCRIPTION_EXPIRED]
+        NT9[MIGRATION_COMPLETE]
+        NT10[ONBOARDING_INCOMPLETE]
+        NT11[DOCUMENT_READY]
+        NT12[SYSTEM]
+    end

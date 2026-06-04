@@ -71,3 +71,11 @@ Thumbs.db
 /agent
 /errors.txt
 .env.example
+logs/
+prompt.txt
+TASKS.txt
+mp_data_fake.txt
+frontend/playwright-report/
+frontend/test-results/
+task.txt
+task_prod.txt

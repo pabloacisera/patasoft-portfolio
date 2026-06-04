@@ -1,17 +1,45 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import helmet from 'helmet';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+    : [frontendUrl, 'http://localhost:5173', 'http://localhost:3000'];
+
   app.enableCors({
-    origin: [frontendUrl, 'http://localhost:5173', 'http://localhost:3000'],
+    origin: corsOrigins,
     credentials: true,
   });
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com', 'https://*.cloudinary.com'],
+        connectSrc: ["'self'", 'https://*.render.com', 'https://*.mercadopago.com', 'wss:'],
+      },
+    },
+  }));
+
+  app.useGlobalPipes(new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transformOptions: {
+      enableImplicitConversion: true,
+    },
+  }));
 
   app.useWebSocketAdapter(new IoAdapter(app));
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -19,10 +47,8 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
-  console.log(`🐱 PataSoft Backend corriendo en http://localhost:${port}`);
-  console.log(`🔗 FRONTEND_URL configurado: ${frontendUrl}`);
-  console.log(`🔑 GOOGLE_CLIENT_ID presente: ${!!process.env.GOOGLE_CLIENT_ID}`);
-  console.log(`🔑 GOOGLE_CALLBACK_URL: ${process.env.GOOGLE_CALLBACK_URL}`);
+  logger.log(`PataSoft Backend corriendo en puerto ${port}`);
+  logger.log(`CORS origins: ${corsOrigins.join(', ')}`);
 }
 
 bootstrap();

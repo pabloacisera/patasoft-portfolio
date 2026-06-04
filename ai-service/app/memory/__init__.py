@@ -2,8 +2,7 @@ import os
 import json
 import redis
 from typing import Any, Dict, List, Optional
-from langchain.memory import ConversationBufferMemory
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")

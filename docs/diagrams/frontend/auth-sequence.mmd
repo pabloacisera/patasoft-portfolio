@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant U as Usuario
+    participant FE as Frontend
+    participant AS as auth.store.js
+    participant API as api.js
+    participant BE as Backend
+
+    Note over U,BE: === Login ===
+    U->>FE: Ingresa email + password
+    FE->>API: POST /auth/login
+    API->>BE: fetch()
+    BE-->>API: {accessToken, refreshToken, user}
+    API-->>FE: Response
+    FE->>AS: setTokens() + setUser()
+    AS->>AS: localStorage
+    FE->>FE: navigate(/dashboard/home)
+
+    Note over U,BE: === Token Expirado ===
+    FE->>API: GET /clients (Bearer oldToken)
+    API->>BE: fetch()
+    BE-->>API: 401 Unauthorized
+    API->>API: isRefreshing=true
+    API->>BE: POST /auth/refresh {refreshToken}
+    BE-->>API: {accessToken, refreshToken}
+    API->>AS: setToken(newAccessToken)
+    API->>API: isRefreshing=false
+    API->>API: reintenta request original
+    BE-->>API: 200 OK
+
+    Note over U,BE: === Google OAuth ===
+    U->>FE: Click "Iniciar con Google"
+    FE->>BE: window.location = /auth/google
+    BE-->>U: Redirect Google consent
+    U->>BE: Callback con code
+    BE-->>FE: Redirect /auth/callback?token=...&refresh=...
+    FE->>FE: Extrae tokens de URL
+    FE->>AS: setTokens() + setUser()
+    FE->>FE: navigate(/dashboard/home)

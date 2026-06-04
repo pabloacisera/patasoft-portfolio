@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, Min, Max, IsDateString, IsArray, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, Min, Max, IsDateString, IsArray } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -47,7 +47,7 @@ export class CreatePetDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
+  @IsString()
   clientId?: string;
 
   @ApiPropertyOptional()
@@ -60,12 +60,12 @@ export class UpdatePetDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  name?: string;
+  clientId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  clientId?: string;
+  @IsString()
+  name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

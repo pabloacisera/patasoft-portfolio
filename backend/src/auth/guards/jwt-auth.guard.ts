@@ -2,12 +2,14 @@ import { Injectable, ExecutionContext, ForbiddenException } from '@nestjs/common
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RedisService } from '../../redis/redis.service';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
+    private redis: RedisService,
   ) {
     super();
   }
@@ -76,18 +78,31 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       return true;
     }
 
-    // Check de suscripción expirada en cada request
+    // Check de suscripción expirada en cada request (con cache Redis)
     try {
-      const subscription = await this.prisma.subscription.findUnique({
-        where: { companyId: user.companyId },
-      });
-
-      if (subscription) {
-        const now = new Date();
-        const isTrialExpired = subscription.status === 'TRIAL' && subscription.trialEndsAt && new Date(subscription.trialEndsAt) < now;
-        const isSubExpired = subscription.status === 'ACTIVE' && subscription.expiresAt && new Date(subscription.expiresAt) < now;
+      const cacheKey = `sub_status:${user.companyId}`;
+      const cachedSubscription = await this.redis.get(cacheKey);
+      let subscriptionData: any;
+      
+      if (!cachedSubscription) {
+        const subscription = await this.prisma.subscription.findUnique({
+          where: { companyId: user.companyId },
+        });
         
-        if (isTrialExpired || isSubExpired || subscription.status === 'BLOCKED') {
+        if (subscription) {
+          await this.redis.set(cacheKey, JSON.stringify(subscription), 300);
+          subscriptionData = subscription;
+        }
+      } else {
+        subscriptionData = JSON.parse(cachedSubscription);
+      }
+
+      if (subscriptionData) {
+        const now = new Date();
+        const isTrialExpired = subscriptionData.status === 'TRIAL' && subscriptionData.trialEndsAt && new Date(subscriptionData.trialEndsAt) < now;
+        const isSubExpired = subscriptionData.status === 'ACTIVE' && subscriptionData.expiresAt && new Date(subscriptionData.expiresAt) < now;
+        
+        if (isTrialExpired || isSubExpired || subscriptionData.status === 'BLOCKED') {
           throw new ForbiddenException('SUBSCRIPTION_EXPIRED:Tu suscripción ha expirado. Por favor renová en Configuración / Suscripción.');
         }
       }

@@ -1,0 +1,35 @@
+sequenceDiagram
+    participant FE as Frontend
+    participant SOCK as socket.js
+    participant AUTH as auth.store.js
+    participant WS as WebSocket Gateway
+    participant BE as Backend Services
+
+    FE->>SOCK: connect()
+    SOCK->>AUTH: getToken()
+    SOCK->>WS: connect(auth:{token})
+    WS->>WS: Verifica JWT
+    WS->>WS: Join room "company:{companyId}"
+    WS-->>SOCK: connected
+
+    Note over FE,BE: Eventos entrantes
+    BE->>WS: emitToCompany("notification:new", data)
+    WS-->>SOCK: notification:new
+    SOCK->>FE: dispatchEvent
+    FE->>FE: notifStore.add(data)
+
+    BE->>WS: emitToCompany("document:ready", {url, type})
+    WS-->>SOCK: document:ready
+    FE->>FE: Toast.show("Documento listo")
+
+    BE->>WS: emitToCompany("stock:alert", supply)
+    WS-->>SOCK: stock:alert
+    FE->>FE: Toast.show("Stock bajo: " + name)
+
+    BE->>WS: emitToCompany("debt:alert", debt)
+    WS-->>SOCK: debt:alert
+
+    BE->>WS: emitToCompany("company:blocked", reason)
+    WS-->>SOCK: company:blocked
+    FE->>FE: Muestra pantalla de bloqueo
+    FE->>FE: Restringe acceso

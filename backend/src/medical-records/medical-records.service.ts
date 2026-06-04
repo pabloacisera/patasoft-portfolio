@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { PdfService } from '../documents/pdf.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
+import { DocumentProcessorService } from '../queues/document-processor.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class MedicalRecordsService {
     private pdfService: PdfService,
     private rag: LocalRagService,
     private cashService: CashRegisterService,
+    private documentProcessor: DocumentProcessorService,
   ) {}
 
   async findAll(companyId: string, pagination: any = {}) {
@@ -208,7 +210,8 @@ export class MedicalRecordsService {
         if (!proc.supplyId) continue;
         const supply = await tx.supply.findUnique({ where: { id: proc.supplyId } });
         if (!supply) continue;
-        const stockUnitsUsed = proc.quantity || 1;
+        const qty2 = proc.quantity || 1;
+        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty2 / supply.unitsPerStock) : qty2;
         await tx.supply.update({
           where: { id: proc.supplyId },
           data: { quantity: { decrement: stockUnitsUsed } },
@@ -220,11 +223,11 @@ export class MedicalRecordsService {
         if (!pres.soldInClinic || !pres.supplyId) continue;
         const supply = await tx.supply.findUnique({ where: { id: pres.supplyId } });
         if (!supply) continue;
-        const qty = pres.dispensingQuantity || pres.quantity || 1;
-        const newQty = Math.max(0, supply.quantity - qty);
+        const dispensingQty = pres.dispensingQuantity || pres.quantity || 1;
+        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(dispensingQty / supply.unitsPerStock) : dispensingQty;
         await tx.supply.update({
           where: { id: pres.supplyId },
-          data: { quantity: newQty },
+          data: { quantity: { decrement: stockUnitsUsed } },
         });
       }
 
@@ -258,13 +261,16 @@ export class MedicalRecordsService {
     });
 
     // 5. Movimiento de caja para pagos en efectivo
-    if (dto.paymentMethod === 'CASH' && dto.paymentStatus !== 'CANCELLED') {
+    if (dto.paymentMethod === 'CASH' && dto.paymentStatus === 'PAID') {
       await this.cashService.createFromPayment(companyId, result.payment.id, result.payment.totalAmount);
     }
 
-    // 6. Generar PDFs en background (no bloquear la respuesta)
-    this.generateAndStorePdfs(result.record.id, result.payment.id, companyId).catch(e =>
-      this.logger.error('Error generando PDFs post-consulta', e)
+    // 6. Generar PDFs via cola (no bloquear la respuesta)
+    this.documentProcessor.enqueuePdfJob({ companyId, pdfType: 'prescription', recordId: result.record.id }).catch(e =>
+      this.logger.error('Error encolando PDF receta', e)
+    );
+    this.documentProcessor.enqueuePdfJob({ companyId, pdfType: 'receipt', paymentId: result.payment.id }).catch(e =>
+      this.logger.error('Error encolando PDF comprobante', e)
     );
 
     this.rag.upsertEmbedding(companyId,
@@ -274,13 +280,6 @@ export class MedicalRecordsService {
 
     this.logger.log(`Historial creado: ${result.record.id} para mascota ${pet.name}`);
     return result;
-  }
-
-  private async generateAndStorePdfs(recordId: string, paymentId: string, companyId: string) {
-    await Promise.allSettled([
-      this.pdfService.generateAndStorePrescription(recordId, companyId),
-      this.pdfService.generateAndStoreReceipt(paymentId, companyId),
-    ]);
   }
 
   async update(id: string, companyId: string, dto: UpdateMedicalRecordDto) {
@@ -337,9 +336,11 @@ export class MedicalRecordsService {
     if (dto.supplyId) {
       const supply = await this.prisma.supply.findFirst({ where: { id: dto.supplyId, companyId } });
       if (supply) {
-        const newQty = Math.max(0, supply.quantity - (dto.quantity || 1));
+        const qty = dto.quantity || 1;
+        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty / supply.unitsPerStock) : qty;
+        const newQty = Math.max(0, supply.quantity - stockUnitsUsed);
         await this.prisma.supply.update({ where: { id: dto.supplyId }, data: { quantity: newQty } });
-        this.logger.log(`Stock descontado por procedure agregado: ${supply.name} -${dto.quantity || 1} (quedan ${newQty})`);
+        this.logger.log(`Stock descontado por procedure agregado: ${supply.name} -${stockUnitsUsed} (quedan ${newQty})`);
       }
     }
 

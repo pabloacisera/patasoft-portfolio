@@ -1,0 +1,351 @@
+erDiagram
+    Company ||--o{ User : "tiene"
+    Company ||--|| CompanyConfig : "configura"
+    Company ||--|| Subscription : "suscribe"
+    Company ||--o{ Client : "atiende"
+    Company ||--o{ Pet : "registra"
+    Company ||--o{ Supply : "almacena"
+    Company ||--o{ PriceItem : "precia"
+    Company ||--o{ Payment : "cobra"
+    Company ||--o{ Debt : "registra_deuda"
+    Company ||--o{ CashMovement : "caja"
+    Company ||--o{ Notification : "notifica"
+    Company ||--o{ Document : "archiva"
+    Company ||--o{ CompanyConnection : "conecta_A"
+    Company ||--o{ CompanyConnection : "conecta_B"
+
+    User ||--o{ RefreshToken : "auth"
+
+    Client ||--o{ Pet : "posee"
+    Client ||--o{ Payment : "paga"
+    Client ||--o{ Debt : "debe"
+
+    Pet ||--o{ MedicalRecord : "historial"
+    Pet ||--o{ PetPhoto : "fotos"
+
+    MedicalRecord ||--o{ Procedure : "incluye"
+    MedicalRecord ||--o{ Prescription : "receta"
+    MedicalRecord ||--o| Payment : "factura_opcional"
+
+    Payment ||--o{ PaymentItem : "items"
+    Payment ||--o| Debt : "genera_opcional"
+
+    Supply ||--o{ Procedure : "consume_en_procedure"
+    Supply ||--o{ Prescription : "vende_en_receta"
+    Supply ||--o{ SupplyPurchase : "comprado_en"
+
+    Procedure }o--o| PriceItem : "precio_opcional"
+    Prescription }o--o| Supply : "insumo_opcional"
+
+    Company {
+        string id PK
+        string name
+        string slug UK
+        string cuit UK
+        string legalName
+        string address
+        string phone
+        string email
+        string animalSpecialties
+        boolean isBlocked
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CompanyConfig {
+        string id PK
+        string companyId FK
+        string currency
+        string defaultAIModel
+        int lowStockDefaultPct
+        int debtAlertDays
+        boolean notifyEmail
+        boolean notifyInApp
+        string mpAccessToken
+        string mpRefreshToken
+        string mpUserId
+        datetime mpTokenExpiresAt
+        boolean onboardComplete
+    }
+
+    User {
+        string id PK
+        string companyId FK
+        string email UK
+        string passwordHash
+        string name
+        UserRole role
+        string googleId UK
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    RefreshToken {
+        string id PK
+        string token UK
+        string userId FK
+        datetime expiresAt
+        datetime createdAt
+    }
+
+    Subscription {
+        string id PK
+        string companyId FK
+        SubscriptionPlan plan
+        SubscriptionStatus status
+        string mpSubscriptionId
+        string mpPreapprovalId
+        datetime trialEndsAt
+        datetime expiresAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CompanyConnection {
+        string id PK
+        string companyAId FK
+        string companyBId FK
+        ConnectionStatus status
+        string requestedBy
+        datetime createdAt
+    }
+
+    GlobalConfig {
+        string key PK
+        string value
+        string description
+        string updatedBy
+        datetime updatedAt
+    }
+
+    Client {
+        string id PK
+        string companyId FK
+        string name
+        string lastName
+        string dni
+        string cuil
+        string email
+        string phone
+        string address
+        boolean isCompany
+        string companyName
+        string notes
+        boolean isDeleted
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Pet {
+        string id PK
+        string companyId FK
+        string clientId FK
+        string name
+        string species
+        string breed
+        string color
+        string gender
+        date birthDate
+        float weight
+        string microchipId
+        boolean isNeutered
+        string notes
+        boolean isDeleted
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    PetPhoto {
+        string id PK
+        string petId FK
+        string cloudinaryUrl
+        string cloudinaryId
+        boolean isPrimary
+        datetime createdAt
+    }
+
+    MedicalRecord {
+        string id PK
+        string companyId FK
+        string petId FK
+        datetime date
+        string visitReason
+        string diagnosis
+        string treatment
+        string observations
+        float weight
+        float temperature
+        datetime nextVisitDate
+        string veterinarianId
+        string audioNoteUrl
+        boolean isDeleted
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Procedure {
+        string id PK
+        string medicalRecordId FK
+        string name
+        string description
+        string priceItemId FK
+        decimal customPrice
+        int quantity
+        string supplyId FK
+        datetime createdAt
+    }
+
+    Prescription {
+        string id PK
+        string medicalRecordId FK
+        string medicineName
+        string dose
+        string frequency
+        string duration
+        boolean soldInClinic
+        int quantity
+        int dispensingQuantity
+        string dispensingUnit
+        int doseQuantity
+        string doseUnit
+        string supplyId FK
+        datetime createdAt
+    }
+
+    PriceItem {
+        string id PK
+        string companyId FK
+        string name
+        string category
+        decimal price
+        string description
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Payment {
+        string id PK
+        string companyId FK
+        string clientId FK
+        string petId FK
+        string medicalRecordId FK
+        decimal totalAmount
+        decimal paidAmount
+        PaymentStatus status
+        PaymentMethod method
+        string mpPaymentId
+        date dueDate
+        datetime paidAt
+        boolean isDeleted
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    PaymentItem {
+        string id PK
+        string paymentId FK
+        string description
+        int quantity
+        decimal unitPrice
+        decimal totalPrice
+        ItemType itemType
+        datetime createdAt
+    }
+
+    Debt {
+        string id PK
+        string companyId FK
+        string clientId FK
+        string paymentId FK
+        decimal amount
+        DebtStatus status
+        date dueDate
+        decimal interestRate
+        decimal originalAmount
+        decimal paidAmount
+        boolean alertSent1Day
+        boolean alertSent2Day
+        boolean isDeleted
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Supply {
+        string id PK
+        string companyId FK
+        string name
+        string brand
+        string category
+        string unit
+        int quantity
+        int minQuantity
+        int initialQty
+        decimal unitPrice
+        decimal salePrice
+        date expiresAt
+        string dispensingUnit
+        string stockUnit
+        int unitsPerStock
+        boolean isDeleted
+        datetime deletedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SupplyPurchase {
+        string id PK
+        string supplyId FK
+        int quantity
+        decimal unitCost
+        decimal totalCost
+        string supplier
+        string invoiceNum
+        datetime purchasedAt
+        datetime createdAt
+    }
+
+    Document {
+        string id PK
+        string companyId FK
+        DocumentType type
+        string cloudinaryUrl
+        string cloudinaryId
+        string folder
+        string relatedEntityId
+        string relatedEntity
+        boolean isDeleted
+        datetime deletedAt
+        datetime createdAt
+    }
+
+    Notification {
+        string id PK
+        string companyId FK
+        string userId FK
+        NotificationType type
+        string title
+        string message
+        boolean isRead
+        json data
+        datetime expiresAt
+        datetime createdAt
+    }
+
+    CashMovement {
+        string id PK
+        string companyId FK
+        CashMovementType type
+        decimal amount
+        string reason
+        string createdBy
+        string paymentId FK
+        date date
+        datetime createdAt
+    }

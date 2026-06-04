@@ -25,9 +25,4 @@ export class CronService {
     await this.subService.checkExpirations();
     this.logger.log('Proceso de expiración de suscripciones completado');
   }
-
-  @Cron(CronExpression.EVERY_MINUTE)
-  async handleSubscriptionExpirationsTest() {
-    await this.subService.checkExpirations();
-  }
 }

@@ -5,6 +5,7 @@ import { PaymentStatus, PaymentMethod } from '@prisma/client';
 import { MercadopagoService } from '../mercadopago/mercadopago.service';
 import { PdfService } from '../documents/pdf.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
+import { DocumentProcessorService } from '../queues/document-processor.service';
 
 @Injectable()
 export class PaymentsService {
@@ -15,6 +16,7 @@ export class PaymentsService {
     private mpService: MercadopagoService,
     private pdfService: PdfService,
     private cashService: CashRegisterService,
+    private documentProcessor: DocumentProcessorService,
   ) {}
 
   async findAll(companyId: string, q: any = {}) {
@@ -103,7 +105,7 @@ export class PaymentsService {
       this.logger.log(`Stock descontado: ${supply.name} -${stockUnitsUsed}`);
     }
 
-    if (dto.method === 'CASH' && payment.status !== 'CANCELLED') {
+    if (dto.method === 'CASH' && payment.status === 'PAID') {
       await this.cashService.createFromPayment(companyId, payment.id, payment.totalAmount);
     }
 
@@ -130,8 +132,8 @@ export class PaymentsService {
 
     // Generar comprobante si el pago ya está cobrado
     if (payment.status === 'PAID' && !payment.cloudinaryUrl) {
-      this.pdfService.generateAndStoreReceipt(payment.id, companyId).catch(e =>
-        this.logger.error('Error generando comprobante al crear pago', e)
+      this.documentProcessor.enqueuePdfJob({ companyId, pdfType: 'receipt', paymentId: payment.id }).catch(e =>
+        this.logger.error('Error encolando PDF comprobante', e)
       );
     }
 
@@ -174,7 +176,7 @@ export class PaymentsService {
       if (!existingMovement) {
         const paymentMethod = dto.method || payment.method;
         if (paymentMethod === 'CASH') {
-          await this.cashService.createFromPayment(companyId, id, updated.paidAmount || updated.totalAmount);
+          await this.cashService.createFromPayment(companyId, id, updated.paidAmount ?? updated.totalAmount);
         }
       }
       if (updated.debt) {
@@ -185,8 +187,8 @@ export class PaymentsService {
       }
       // Generar comprobante PDF si no tiene cloudinaryUrl
       if (!updated.cloudinaryUrl) {
-        this.pdfService.generateAndStoreReceipt(id, companyId).catch(e =>
-          this.logger.error('Error generando comprobante al pagar', e)
+        this.documentProcessor.enqueuePdfJob({ companyId, pdfType: 'receipt', paymentId: id }).catch(e =>
+          this.logger.error('Error encolando PDF comprobante', e)
         );
       }
     }

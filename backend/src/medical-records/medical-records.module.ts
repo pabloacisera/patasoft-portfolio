@@ -5,6 +5,7 @@ import { MedicalRecordsService } from './medical-records.service';
 import { PdfService } from '../documents/pdf.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CashRegisterModule } from '../cash-register/cash-register.module';
+import { QueuesModule } from '../queues/queues.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { CashRegisterModule } from '../cash-register/cash-register.module';
     }),
     AiProxyModule,
     CashRegisterModule,
+    QueuesModule,
   ],
   controllers: [MedicalRecordsController],
   providers: [MedicalRecordsService, PdfService],

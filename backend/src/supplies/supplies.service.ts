@@ -120,7 +120,8 @@ export class SuppliesService {
   async decreaseStock(id: string, companyId: string, qty: number, dispensingQty?: number) {
     const supply = await this.findOne(id, companyId);
 
-    let stockToDiscount = dispensingQty || qty;
+    const amount = dispensingQty || qty;
+    const stockToDiscount = supply.unitsPerStock ? Math.ceil(amount / supply.unitsPerStock) : amount;
 
     const newQty = Math.max(0, supply.quantity - stockToDiscount);
 

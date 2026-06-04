@@ -22,10 +22,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
+    const rawMessage =
       exception instanceof HttpException
         ? exception.getResponse()
         : 'Error interno del servidor';
+
+    const message =
+      typeof rawMessage === 'object' && rawMessage !== null
+        ? (rawMessage as any).message || rawMessage
+        : rawMessage;
+
+    const msgStr = typeof message === 'string' ? message : JSON.stringify(message);
+    const colonIdx = msgStr.indexOf(':');
+    const code = colonIdx > 0 && colonIdx < 20 ? msgStr.substring(0, colonIdx) : undefined;
 
     const errorResponse = {
       statusCode: status,
@@ -33,6 +42,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       path: request.url,
       method: request.method,
       message,
+      ...(code && { code }),
     };
 
     if (status === HttpStatus.INTERNAL_SERVER_ERROR) {

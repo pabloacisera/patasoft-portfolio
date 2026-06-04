@@ -1,7 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
+import { PdfModule } from '../documents/pdf.module';
 import { DocumentProcessorService } from './document-processor.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 
@@ -9,10 +9,8 @@ import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
   imports: [
     ConfigModule,
     PrismaModule,
+    PdfModule,
     forwardRef(() => AiProxyModule),
-    BullModule.registerQueue({
-      name: 'document-processing',
-    }),
   ],
   providers: [DocumentProcessorService],
   exports: [DocumentProcessorService],

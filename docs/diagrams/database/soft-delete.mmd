@@ -1,0 +1,22 @@
+graph LR
+    subgraph "Entidades con Soft-Delete"
+        CLIENT[Client isDeleted + deletedAt]
+        PET[Pet isDeleted + deletedAt]
+        MR[MedicalRecord isDeleted + deletedAt]
+        PAY[Payment isDeleted + deletedAt]
+        DEBT[Debt isDeleted + deletedAt]
+        SUP[Supply isDeleted + deletedAt]
+        DOC[Document isDeleted + deletedAt]
+    end
+
+    subgraph "Regla"
+        FILTER[Toda query: WHERE isDeleted = false]
+    end
+
+    CLIENT --> FILTER
+    PET --> FILTER
+    MR --> FILTER
+    PAY --> FILTER
+    DEBT --> FILTER
+    SUP --> FILTER
+    DOC --> FILTER

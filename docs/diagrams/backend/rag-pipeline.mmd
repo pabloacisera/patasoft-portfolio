@@ -1,0 +1,45 @@
+graph TB
+    subgraph "Fuentes 7 categorias"
+        COMP[Company]
+        CLI[Clientes]
+        PET[Mascotas]
+        SUP[Insumos]
+        PRC[PriceItems]
+        MR2[MedicalRecords max 100]
+        PAY2[Payments max 200]
+    end
+
+    subgraph "CRUD Events"
+        TRIGGER[upsertEmbedding / deleteEmbedding]
+    end
+
+    subgraph "Local RAG NestJS [SCALE_MODE=local]"
+        INGEST[rag-ingestion.service.ts]
+        EMBED[Google Gemini embedding-2-preview 768d]
+        QUERY[pgvector ORDER BY embedding <=> $1 LIMIT 15]
+        LLM[Groq llama-3.3-70b-versatile streaming]
+        SYSPROMPT[System prompt + contexto 15 docs]
+    end
+
+    subgraph "ai-service Python [SCALE_MODE=PRO]"
+        AI_FAST[FastAPI /chat /rag]
+        LANGCHAIN[LangChain Agent 6 Tools]
+        CHROMADB[ChromaDB coleccion por company]
+        OPENAI[OpenAI GPT-4o / Groq / Gemini]
+    end
+
+    subgraph "PostgreSQL"
+        PGVEC[(langchain_vectors vector 768)]
+    end
+
+    COMP & CLI & PET & SUP & PRC & MR2 & PAY2 --> TRIGGER
+    TRIGGER --> INGEST
+    INGEST -->|batch 5 docs| EMBED
+    EMBED -->|vector 768d| PGVEC
+    QUERY -->|cosine distance| PGVEC
+    QUERY -->|15 docs| LLM
+    LLM -->|stream tokens| SYSPROMPT
+    INGEST -.->|SCALE_MODE=PRO| AI_FAST
+    AI_FAST --> LANGCHAIN
+    AI_FAST --> CHROMADB
+    LANGCHAIN -->|SQLAlchemy raw SQL| PGVEC

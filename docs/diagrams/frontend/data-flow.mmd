@@ -1,0 +1,36 @@
+graph LR
+    subgraph "1. User Action"
+        CLICK[Click / Submit]
+    end
+    subgraph "2. Page Handler [sections/*.js]"
+        LOAD[loadXxxData]
+        RENDER[renderXxxPage]
+    end
+    subgraph "3. API Service [api.js]"
+        REQ[api.get/post/put/patch/delete]
+        TOKEN_CHECK[Inyecta token]
+        RESP[Procesa response]
+        ERR[401 -> refresh -> retry]
+    end
+    subgraph "4. Backend"
+        BE[API REST]
+    end
+    subgraph "5. DOM Update"
+        INNER[innerHTML en #page-content]
+        EVENT[Event Delegation data-action + data-id]
+        MODAL_OPEN[openModal]
+        TOAST_SHOW[Toast.show]
+    end
+    CLICK --> LOAD
+    LOAD --> REQ
+    REQ --> TOKEN_CHECK
+    TOKEN_CHECK --> BE
+    BE --> RESP
+    RESP --> ERR
+    ERR -->|refresh ok| REQ
+    ERR -->|refresh fail| LOGOUT[redirect /login]
+    RESP -->|data| RENDER
+    RENDER --> INNER
+    RENDER --> EVENT
+    RENDER --> MODAL_OPEN
+    RENDER --> TOAST_SHOW

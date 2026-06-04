@@ -4,6 +4,7 @@ import { Queue, Worker, Job } from 'bullmq';
 import * as XLSX from 'xlsx';
 import { AiProxyService } from '../ai-proxy/ai-proxy.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PdfService } from '../documents/pdf.service';
 
 @Injectable()
 export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
@@ -17,6 +18,7 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
     private config: ConfigService,
     private aiProxy: AiProxyService,
     private prisma: PrismaService,
+    private pdfService: PdfService,
   ) {
     const redisUrl = this.config.get('REDIS_URL');
     
@@ -44,9 +46,17 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
 
   private async initBullMQ() {
     this.worker = new Worker('document-processing', async (job: Job) => {
-      const { companyId, fileName, fileBuffer, mimeType } = job.data;
-      this.logger.log(`[BullMQ] Processing job ${job.id}: ${fileName}`);
-      await this.processDocument(companyId, fileName, Buffer.from(fileBuffer), mimeType);
+      const { jobType, companyId } = job.data;
+
+      if (jobType === 'pdf') {
+        const { pdfType, recordId, paymentId } = job.data;
+        this.logger.log(`[BullMQ] Processing PDF job ${job.id}: ${pdfType}`);
+        await this.processPdf(companyId, pdfType, recordId, paymentId);
+      } else {
+        const { fileName, fileBuffer, mimeType } = job.data;
+        this.logger.log(`[BullMQ] Processing job ${job.id}: ${fileName}`);
+        await this.processDocument(companyId, fileName, Buffer.from(fileBuffer), mimeType);
+      }
     }, { connection: this.redisConnection });
 
     this.worker.on('completed', (job) => {
@@ -86,6 +96,21 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async enqueuePdfJob(data: {
+    companyId: string;
+    pdfType: 'prescription' | 'receipt';
+    recordId?: string;
+    paymentId?: string;
+  }): Promise<string> {
+    const payload = { jobType: 'pdf', ...data };
+
+    if (this.useRedis) {
+      return this.enqueueWithBullMQ(payload);
+    } else {
+      return this.enqueueWithPQueue(payload);
+    }
+  }
+
   private async enqueueWithBullMQ(data: any): Promise<string> {
     const queue = new Queue('document-processing', { connection: this.redisConnection });
     const job = await queue.add('process-document', data, {
@@ -98,18 +123,40 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
 
   private async enqueueWithPQueue(data: any): Promise<string> {
     const jobId = `pqueue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+    const isPdf = data.jobType === 'pdf';
+
     this.memoryQueue.add(async () => {
       try {
-        this.logger.log(`[P-Queue] Processing ${data.fileName}`);
-        await this.processDocument(data.companyId, data.fileName, data.fileBuffer, data.mimeType);
-        this.logger.log(`[P-Queue] Completed ${data.fileName}`);
+        if (isPdf) {
+          this.logger.log(`[P-Queue] Processing PDF: ${data.pdfType}`);
+          await this.processPdf(data.companyId, data.pdfType, data.recordId, data.paymentId);
+          this.logger.log(`[P-Queue] Completed PDF: ${data.pdfType}`);
+        } else {
+          this.logger.log(`[P-Queue] Processing ${data.fileName}`);
+          await this.processDocument(data.companyId, data.fileName, data.fileBuffer, data.mimeType);
+          this.logger.log(`[P-Queue] Completed ${data.fileName}`);
+        }
       } catch (error) {
-        this.logger.error(`[P-Queue] Failed ${data.fileName}: ${error.message}`);
+        this.logger.error(`[P-Queue] Failed ${data.fileName || data.pdfType}: ${error.message}`);
       }
     });
 
     return jobId;
+  }
+
+  private async processPdf(companyId: string, pdfType: 'prescription' | 'receipt', recordId?: string, paymentId?: string) {
+    try {
+      if (pdfType === 'prescription' && recordId) {
+        await this.pdfService.generateAndStorePrescription(recordId, companyId);
+        this.logger.log(`PDF prescription ${recordId} generated`);
+      } else if (pdfType === 'receipt' && paymentId) {
+        await this.pdfService.generateAndStoreReceipt(paymentId, companyId);
+        this.logger.log(`PDF receipt ${paymentId} generated`);
+      }
+    } catch (error) {
+      this.logger.error(`Error generating PDF (${pdfType}): ${error.message}`);
+      throw error;
+    }
   }
 
   private async processDocument(companyId: string, fileName: string, buffer: Buffer, mimeType: string) {

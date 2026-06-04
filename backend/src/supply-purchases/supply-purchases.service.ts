@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CashRegisterService } from '../cash-register/cash-register.service';
 import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class SupplyPurchasesService {
   private readonly logger = new Logger(SupplyPurchasesService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cashService: CashRegisterService,
+  ) {}
 
   async findAll(companyId: string, q: any = {}) {
     const { page = 1, limit = 20 } = q;
@@ -38,28 +42,42 @@ export class SupplyPurchasesService {
 
     const totalCost = dto.quantity * dto.unitCost;
 
-    const purchase = await this.prisma.supplyPurchase.create({
-      data: {
-        companyId,
-        supplyId: dto.supplyId,
-        quantity: dto.quantity,
-        unitCost: dto.unitCost,
-        totalCost,
-        supplier: dto.supplier,
-        invoiceNum: dto.invoiceNum,
-        notes: dto.notes,
-        purchasedAt: dto.purchasedAt ? new Date(dto.purchasedAt) : new Date(),
-      },
-      include: { supply: true },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const purchase = await tx.supplyPurchase.create({
+        data: {
+          companyId,
+          supplyId: dto.supplyId,
+          quantity: dto.quantity,
+          unitCost: dto.unitCost,
+          totalCost,
+          supplier: dto.supplier,
+          invoiceNum: dto.invoiceNum,
+          notes: dto.notes,
+          purchasedAt: dto.purchasedAt ? new Date(dto.purchasedAt) : new Date(),
+        },
+        include: { supply: true },
+      });
+
+      await tx.supply.update({
+        where: { id: dto.supplyId },
+        data: { quantity: { increment: dto.quantity } },
+      });
+
+      return purchase;
     });
 
-    await this.prisma.supply.update({
-      where: { id: dto.supplyId },
-      data: { quantity: { increment: dto.quantity } },
-    });
+    try {
+      await this.cashService.create(companyId, {
+        type: 'EXPENSE' as any,
+        amount: totalCost,
+        reason: `Compra de ${supply.name} x${dto.quantity}`,
+      });
+    } catch (e) {
+      this.logger.error(`Error creando movimiento de caja para compra ${result.id}`, e);
+    }
 
-    this.logger.log(`Compra registrada: ${purchase.id} - ${supply.name} +${dto.quantity}`);
-    return purchase;
+    this.logger.log(`Compra registrada: ${result.id} - ${supply.name} +${dto.quantity}`);
+    return result;
   }
 
   async exportExcel(companyId: string) {

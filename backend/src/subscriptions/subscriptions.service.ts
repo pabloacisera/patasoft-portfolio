@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger, forwardRef, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { CreateSubscriptionCheckoutDto, SubscriptionPlanDto } from './dto/subscriptions.dto';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -13,6 +14,7 @@ export class SubscriptionsService {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    private redis: RedisService,
     @Inject(forwardRef(() => EventsGateway))
     private eventsGateway: EventsGateway,
   ) {}
@@ -221,6 +223,7 @@ export class SubscriptionsService {
         }),
       ]);
       this.logger.warn(`Subscription expired for company ${sub.companyId}`);
+      await this.redis.del(`sub_status:${sub.companyId}`);
       try {
         this.eventsGateway.emitToCompany(sub.companyId, 'company:blocked', {
           reason: sub.status === 'TRIAL' ? 'Trial expirado' : 'Suscripción expirada',

@@ -1,0 +1,57 @@
+graph TB
+    HTML[index.html]
+    MAIN[src/main.js]
+    CSS[src/styles/main.css]
+    ROUTER[router.js]
+    AUTH_GUARD[checkAuth]
+    AUTH_STORE[auth.store.js<br/>localStorage]
+    SOCKET[socket.js]
+    API[api.js]
+    WS_BE[WebSocket Gateway]
+    REST_BE[API REST /api/v1]
+
+    HOME[dashboard/home]
+    CLIENTS[dashboard/clients]
+    PETS[dashboard/pets]
+    MR[dashboard/medical-records]
+    PAY[dashboard/payments]
+    SUPPLIES[dashboard/supplies]
+    CASH[dashboard/cash-register]
+    AI_CHAT[dashboard/ai-chat]
+    CONN[dashboard/connections]
+    SETTINGS[settings/*]
+
+    MODAL[Modal.js]
+    TOAST[Toast.js]
+    SEARCH[SearchBar.js]
+    PAG[Pagination.js]
+
+    HTML --> MAIN
+    MAIN --> ROUTER
+    MAIN --> CSS
+    MAIN --> AUTH_STORE
+    MAIN --> SOCKET
+    ROUTER --> AUTH_GUARD
+    AUTH_GUARD -->|redirect /login| LOGIN[Login Page]
+
+    ROUTER --> HOME & CLIENTS & PETS & MR & PAY
+    ROUTER --> SUPPLIES & CASH & AI_CHAT & CONN & SETTINGS
+
+    HOME --> API
+    CLIENTS --> API
+    CLIENTS --> MODAL
+    CLIENTS --> TOAST
+    CLIENTS --> SEARCH
+    CLIENTS --> PAG
+    PETS --> API
+    MR --> API
+    PAY --> API
+    SUPPLIES --> API
+    AI_CHAT --> API
+    AI_CHAT --> SOCKET
+    CONN --> API
+    SETTINGS --> API
+
+    API -->|HTTP| REST_BE
+    SOCKET -->|WSS| WS_BE
+    AUTH_STORE -->|getToken| API

@@ -1,0 +1,76 @@
+graph TB
+    subgraph "Core / Infraestructura"
+        CONFIG[ConfigModule]
+        PRISMA[PrismaModule]
+        REDIS[RedisModule]
+        QUEUES[QueuesModule BullMQ]
+        HEALTH[HealthModule]
+    end
+
+    subgraph "Auth"
+        AUTH[AuthModule JWT + Google OAuth]
+        USERS[UsersModule]
+        GUEST[GuestModule]
+    end
+
+    subgraph "Multi-tenant"
+        COMPANIES[CompaniesModule]
+        SUBS[SubscriptionsModule]
+    end
+
+    subgraph "Core Business"
+        CLIENTS[ClientsModule]
+        PETS[PetsModule]
+        MR[MedicalRecordsModule]
+        PAYMENTS[PaymentsModule]
+        DEBTS[DebtsModule]
+    end
+
+    subgraph "Inventory & Finance"
+        SUPPLIES[SuppliesModule]
+        SPURCH[SupplyPurchasesModule]
+        PRICES[PriceItemsModule]
+        CASH[CashRegisterModule]
+    end
+
+    subgraph "Integraciones"
+        MP[MercadopagoModule]
+        MAIL[MailModule Mailjet]
+        CLOUDINARY[CloudinaryModule]
+        AI[AiProxyModule]
+        DOCS[PdfModule Puppeteer]
+        EVENTS[EventsModule Socket.IO]
+    end
+
+    subgraph "Admin & Background"
+        ADMIN[AdminModule]
+        SUPER[SuperAdminModule]
+        CRON[CronModule]
+        DATA[DataModule]
+        CONN[ConnectionsModule]
+        NOTIF[NotificationsModule]
+    end
+
+    CONFIG --> PRISMA & REDIS & QUEUES
+    AUTH --> PRISMA & USERS & MAIL & GUEST
+    COMPANIES --> PRISMA & SUBS & CLOUDINARY
+    SUBS --> MP & EVENTS & REDIS
+    CLIENTS --> PRISMA & AI
+    PETS --> PRISMA & CLOUDINARY & AI
+    MR --> PRISMA & CASH & DOCS & AI & EVENTS
+    PAYMENTS --> PRISMA & MP & CASH & DOCS
+    DEBTS --> PRISMA & CASH & EVENTS & MAIL
+    SUPPLIES --> PRISMA & AI
+    SPURCH --> PRISMA
+    PRICES --> PRISMA & AI
+    CASH --> PRISMA
+    MP --> PRISMA & REDIS
+    AI --> PRISMA & REDIS
+    DOCS --> CLOUDINARY & PRISMA
+    EVENTS --> REDIS
+    ADMIN --> PRISMA
+    SUPER --> PRISMA
+    CRON --> PRISMA & SUBS & DEBTS
+    DATA --> PRISMA & DOCS
+    CONN --> PRISMA & EVENTS
+    NOTIF --> PRISMA & EVENTS

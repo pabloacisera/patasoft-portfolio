@@ -1,5 +1,6 @@
 import { api } from '../services/api.js';
 import { router } from '../router.js';
+import { isAuthenticated } from '../stores/auth.store.js';
 import { createStepForm } from '../components/StepForm.js';
 import { openModal, closeModal } from '../components/Modal.js';
 import { showToast } from '../components/Toast.js';
@@ -18,15 +19,17 @@ const SPECIALTIES = [
 export async function renderOnboarding() {
   const app = document.getElementById('app');
 
-  try {
-    const company = await api.get('/companies/me');
-    if (company && (company.name || company?.data?.name)) {
-      router.navigate('/dashboard');
-      return;
-    }
-  } catch (e) {
-    if (e.message !== 'ONBOARDING_REQUIRED') {
-      console.warn('[Onboarding] Error verificando empresa:', e.message);
+  if (isAuthenticated()) {
+    try {
+      const company = await api.get('/companies/me');
+      if (company && (company.name || company?.data?.name)) {
+        router.navigate('/dashboard');
+        return;
+      }
+    } catch (e) {
+      if (e.message !== 'ONBOARDING_REQUIRED') {
+        console.warn('[Onboarding] Error verificando empresa:', e.message);
+      }
     }
   }
 
@@ -73,7 +76,7 @@ function getOnboardingLayout() {
       .onboarding-container { max-width: 680px; margin: 0 auto; padding: var(--space-8) var(--space-4); min-height: 100vh; }
       .onboarding-header { text-align: center; margin-bottom: var(--space-10); }
       .onboarding-logo { font-family: var(--font-display); font-size: var(--text-3xl); color: var(--color-forest); margin-bottom: var(--space-2); }
-      .onboarding-subtitle { color: var(--text-secondary); font-size: var(--text-base); }
+      .onboarding-subtitle { color: var(--text-secondary); font-size: var(--text-base); font-weight: normal; margin: 0; }
       #onboarding-form { background: var(--surface); border-radius: var(--radius-xl); padding: var(--space-8); box-shadow: var(--shadow); }
       .form-row { display: grid; grid-template-columns: 1fr; gap: var(--space-4); }
       .specialties-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
@@ -88,11 +91,11 @@ function getOnboardingLayout() {
       .summary-label { color: var(--text-secondary); font-size: var(--text-sm); }
       .summary-value { font-weight: 600; }
     </style>
-    
+
     <div class="onboarding-container">
       <div class="onboarding-header">
         <div class="onboarding-logo">PataSoft</div>
-        <div class="onboarding-subtitle">Configuremos tu veterinaria</div>
+        <h1 class="onboarding-subtitle">Configuración de empresa</h1>
       </div>
       <div id="onboarding-form"></div>
     </div>
@@ -255,7 +258,7 @@ function renderStep3(container) {
 
   container.innerHTML = `
     <p style="margin-bottom: 20px;">Por favor confirmá los datos de tu empresa:</p>
-    
+
     <div class="summary-card">
       <div class="summary-row">
         <span class="summary-label">Nombre</span>
@@ -304,9 +307,9 @@ async function saveOnboardingData(data) {
       address: data.company.address || '',
       phone: data.company.phone,
       email: data.company.email,
-      website: data.company.website,
       animalSpecialties: data.specialties,
       cuit: data.company.cuit || '',
+      ...(data.company.website && { website: data.company.website }),
     };
 
     await api.post('/companies', companyData);
@@ -324,9 +327,9 @@ async function saveOnboardingData(data) {
           const tokens = await response.json();
           setToken(tokens.accessToken, tokens.refreshToken);
         }
-      } catch {}
+      } catch { }
     }
-    closeModal( );
+    closeModal();
     showToast('Empresa creada correctamente', 'success');
     router.navigate('/dashboard');
   } catch (error) {

@@ -12,7 +12,15 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/' })
+@WebSocketGateway({
+  cors: {
+    origin: process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+      : [process.env.FRONTEND_URL || 'http://localhost:5173'],
+    credentials: true,
+  },
+  namespace: '/',
+})
 @Injectable()
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;

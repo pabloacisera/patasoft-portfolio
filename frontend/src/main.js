@@ -2,9 +2,10 @@ import { router } from './router.js';
 import { isAuthenticated, loadFromStorage, getCompany } from './stores/auth.store.js';
 import { connect, disconnect } from './services/socket.js';
 import { api } from './services/api.js';
+import { showBlockedFullScreen, showBlockedBanner } from './utils/ui.js';
 
 import { renderLogin, renderRegister, renderAuthCallback } from './pages/auth.js';
-import { renderDashboard, renderDashboardHome } from './pages/dashboard.jsx';
+import { renderDashboard, renderDashboardHome } from './pages/dashboard.js';
 
 const PUBLIC_ROUTES = ['/login', '/register', '/onboarding', '/auth/callback'];
 const AUTH_ROUTES = ['/dashboard', '/settings', '/admin', '/api/v1/auth/google'];
@@ -17,17 +18,17 @@ router.register('/onboarding', { render: () => import('./pages/onboarding.js').t
 router.register('/', { render: renderDashboardHome });
 router.register('/dashboard', { render: renderDashboard });
 router.register('/dashboard/home', { render: renderDashboardHome });
-router.register('/dashboard/clients', { render: () => import('./pages/dashboard.jsx').then(m => m.renderClients()) });
-router.register('/dashboard/pets', { render: () => import('./pages/dashboard.jsx').then(m => m.renderPets()) });
-router.register('/dashboard/medical-records', { render: () => import('./pages/dashboard.jsx').then(m => m.renderMedicalRecords()) });
-router.register('/dashboard/payments', { render: () => import('./pages/dashboard.jsx').then(m => m.renderPayments()) });
-router.register('/dashboard/supplies', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSupplies()) });
-router.register('/dashboard/ai-chat', { render: () => import('./pages/dashboard.jsx').then(m => m.renderAIChat()) });
-router.register('/dashboard/cash-register', { render: () => import('./pages/dashboard.jsx').then(m => m.renderCashRegister()) });
-router.register('/dashboard/connections', { render: () => import('./pages/dashboard.jsx').then(m => m.renderConnections()) });
-router.register('/dashboard/documents', { render: () => import('./pages/dashboard.jsx').then(m => m.renderDocuments()) });
-router.register('/settings', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettings()) });
-router.register('/settings/company', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsCompany()) });
+router.register('/dashboard/clients', { render: () => import('./pages/dashboard.js').then(m => m.renderClients()) });
+router.register('/dashboard/pets', { render: () => import('./pages/dashboard.js').then(m => m.renderPets()) });
+router.register('/dashboard/medical-records', { render: () => import('./pages/dashboard.js').then(m => m.renderMedicalRecords()) });
+router.register('/dashboard/payments', { render: () => import('./pages/dashboard.js').then(m => m.renderPayments()) });
+router.register('/dashboard/supplies', { render: () => import('./pages/dashboard.js').then(m => m.renderSupplies()) });
+router.register('/dashboard/ai-chat', { render: () => import('./pages/dashboard.js').then(m => m.renderAIChat()) });
+router.register('/dashboard/cash-register', { render: () => import('./pages/dashboard.js').then(m => m.renderCashRegister()) });
+router.register('/dashboard/connections', { render: () => import('./pages/dashboard.js').then(m => m.renderConnections()) });
+router.register('/dashboard/documents', { render: () => import('./pages/dashboard.js').then(m => m.renderDocuments()) });
+router.register('/settings', { render: () => import('./pages/dashboard.js').then(m => m.renderSettings()) });
+router.register('/settings/company', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsCompany()) });
 router.register('/settings/subscription', { 
   render: async () => {
     const params = new URLSearchParams(window.location.search);
@@ -44,18 +45,18 @@ router.register('/settings/subscription', {
         setTimeout(() => toast.remove(), 4000);
       }, 500);
     }
-    return import('./pages/dashboard.jsx').then(m => m.renderSettingsSubscription());
+    return import('./pages/dashboard.js').then(m => m.renderSettingsSubscription());
   }
 });
-router.register('/settings/mercadopago', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsMercadoPago()) });
-router.register('/settings/prices', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsPrices()) });
-router.register('/settings/ai', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsAI()) });
-router.register('/settings/connections', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSettingsConnections()) });
+router.register('/settings/mercadopago', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsMercadoPago()) });
+router.register('/settings/prices', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsPrices()) });
+router.register('/settings/ai', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsAI()) });
+router.register('/settings/connections', { render: () => import('./pages/dashboard.js').then(m => m.renderSettingsConnections()) });
 router.register('/settings/export-data', {
-  render: () => import('./pages/dashboard.jsx').then(m => m.renderExportData())
+  render: () => import('./pages/dashboard.js').then(m => m.renderExportData())
 });
 router.register('/admin', { render: () => import('./pages/admin.js').then(m => m.renderAdmin()) });
-router.register('/superadmin/subscriptions', { render: () => import('./pages/dashboard.jsx').then(m => m.renderSuperAdminSubscriptions()) });
+router.register('/superadmin/subscriptions', { render: () => import('./pages/dashboard.js').then(m => m.renderSuperAdminSubscriptions()) });
 
 function checkAuth(pathname) {
   if (PUBLIC_ROUTES.includes(pathname)) {
@@ -108,66 +109,15 @@ async function initApp() {
         if (ALLOWED_BLOCKED_ROUTES.includes(pathname)) {
           showBlockedBanner(company.blockedReason || 'Tu suscripción ha vencido.');
         } else {
-          document.body.innerHTML = `
-            <div style="display:flex;flex-direction:column;align-items:center;
-              justify-content:center;height:100vh;gap:20px;font-family:sans-serif;
-              background:#0f172a;color:white;text-align:center;padding:24px;">
-              <div style="font-size:48px;margin-bottom:4px;">🔒</div>
-              <h2 style="color:#ef4444;font-size:24px;margin:0;">Cuenta bloqueada</h2>
-              <p style="color:#94a3b8;max-width:420px;line-height:1.5;margin:0;">
-                ${company.blockedReason || 'Tu suscripción ha vencido.'}
-              </p>
-              <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px;">
-                <a href="/settings/subscription"
-                   style="background:#6366f1;color:white;padding:12px 28px;
-                   border-radius:8px;text-decoration:none;font-weight:600;">
-                  Renovar suscripción
-                </a>
-                <a href="/settings/export-data"
-                   style="background:transparent;color:#94a3b8;padding:12px 28px;
-                   border-radius:8px;text-decoration:none;font-weight:500;
-                   border:1.5px solid #334155;">
-                  Descargar mis datos
-                </a>
-              </div>
-            </div>
-          `;
+          showBlockedFullScreen(company.blockedReason || 'Tu suscripción ha vencido.');
           return;
         }
       }
     } catch(e) {}
   }
 
-  function showBlockedBanner(reason) {
-    const existing = document.getElementById('blocked-banner');
-    if (existing) existing.remove();
-    const banner = document.createElement('div');
-    banner.id = 'blocked-banner';
-    banner.style.cssText = `
-      position:fixed;top:0;left:0;right:0;z-index:99999;
-      background:#991b1b;color:white;padding:10px 20px;
-      font-family:sans-serif;font-size:14px;text-align:center;
-      display:flex;align-items:center;justify-content:center;gap:12px;
-      flex-wrap:wrap;
-    `;
-    banner.innerHTML = `
-      <span>🔒 ${reason}</span>
-      <a href="/settings/subscription"
-         style="background:white;color:#991b1b;padding:4px 16px;
-         border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">
-        Renovar suscripción
-      </a>
-      <a href="/settings/export-data"
-         style="background:transparent;color:white;padding:4px 16px;
-         border-radius:6px;text-decoration:none;font-weight:500;font-size:13px;
-         border:1px solid rgba(255,255,255,0.4);">
-        Descargar mis datos
-      </a>
-    `;
-    document.body.prepend(banner);
-  }
-
   if (!checkAuth(pathname)) {
+    history.replaceState(null, '', '/login');
     router.navigate('/login', false);
     return;
   }
@@ -188,9 +138,13 @@ async function initApp() {
                                   pathname === '/';
       if (isGoingToDashboard) {
         try {
-          await api.get('/companies/me');
+          const user = await api.get('/auth/me');
+          if (user && !user.companyId) {
+            router.navigate('/onboarding', false);
+            return;
+          }
         } catch (err) {
-          if (err.message.includes('empresa') || err.message === 'ONBOARDING_REQUIRED') {
+          if (err.message === 'ONBOARDING_REQUIRED' || err.message.includes('empresa')) {
             router.navigate('/onboarding', false);
             return;
           }
@@ -207,4 +161,22 @@ document.addEventListener('DOMContentLoaded', initApp);
 
 window.addEventListener('beforeunload', () => {
   disconnect();
+});
+
+window.addEventListener('error', (event) => {
+  console.error('[Global Error]', event.error || event.message);
+  if (!event.defaultPrevented) {
+    const msg = event.error?.message || event.message || 'Error inesperado';
+    import('./components/Toast.js').then(({ Toast }) => {
+      Toast.error(msg);
+    });
+  }
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[Unhandled Rejection]', event.reason);
+  const msg = event.reason?.message || 'Error inesperado';
+  import('./components/Toast.js').then(({ Toast }) => {
+    Toast.error(msg);
+  });
 });

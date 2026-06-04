@@ -1,0 +1,24 @@
+graph TB
+    subgraph "PostgreSQL"
+        subgraph "Prisma Schema 21 modelos"
+            PRISMA[Tablas gestionadas por Prisma]
+        end
+        subgraph "Raw SQL pg Pool"
+            PGVEC[langchain_vectors<br/>id: uuid<br/>content: text<br/>metadata: jsonb<br/>embedding: vector 768<br/>company_id: uuid]
+        end
+    end
+
+    subgraph "Acceso"
+        PRISMA_CLIENT[PrismaClient]
+        PG_POOL[pg.Pool SQL raw]
+    end
+
+    subgraph "Uso"
+        NESTJS_BIZ[Modulos de negocio PrismaClient]
+        LOCAL_RAG[LocalRagService pg.Pool Gemini embedding pgvector]
+    end
+
+    NESTJS_BIZ --> PRISMA_CLIENT
+    PRISMA_CLIENT --> PRISMA
+    LOCAL_RAG --> PG_POOL
+    PG_POOL --> PGVEC

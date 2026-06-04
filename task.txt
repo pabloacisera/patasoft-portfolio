@@ -1,2 +1,0 @@
-- la sincronizacion dura muchisimo, y deberia hacer automatica, al menos 4 veces al dia
-- la caja no funciona, hay dos pagos hechos, 1 por consulta, y otro autonomo, que no esta registrado como ingreso de dinero y todo estan en estado pagado(volver a probar el qr)

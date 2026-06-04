@@ -30,8 +30,8 @@ class PetsInput(BaseModel):
 
 
 class GetPetsTool(BaseTool):
-    name = "get_pets"
-    description = """Busca mascotas de la empresa. 
+    name: str = "get_pets"
+    description: str = """Busca mascotas de la empresa. 
     - company_id: ID de la empresa (requerido)
     - name: nombre parcial o completo de la mascota
     - species: especie (dog, cat, horse, bird, rabbit, reptile, other)
@@ -107,8 +107,8 @@ class GetClientsInput(BaseModel):
 
 
 class GetClientsTool(BaseTool):
-    name = "get_clients"
-    description = """Busca clientes de la empresa.
+    name: str = "get_clients"
+    description: str = """Busca clientes de la empresa.
     - company_id: ID de la empresa (requerido)
     - name: nombre o apellido parcial
     - email: email parcial o completo
@@ -175,8 +175,8 @@ class GetMedicalRecordsInput(BaseModel):
 
 
 class GetMedicalRecordsTool(BaseTool):
-    name = "get_medical_records"
-    description = """Obtiene el historial médico de una mascota.
+    name: str = "get_medical_records"
+    description: str = """Obtiene el historial médico de una mascota.
     - pet_id: ID de la mascota (requerido)
     - limit: número de registros (default 10, máximo 50)
     Returns el historial con fecha, motivo, diagnóstico y tratamiento."""
@@ -239,8 +239,8 @@ class GetSuppliesInput(BaseModel):
 
 
 class GetSuppliesTool(BaseTool):
-    name = "get_supplies"
-    description = """Busca insumos del stock de la empresa.
+    name: str = "get_supplies"
+    description: str = """Busca insumos del stock de la empresa.
     - company_id: ID de la empresa (requerido)
     - name: nombre parcial
     - category: medicine, equipment, consumable, other
@@ -309,8 +309,8 @@ class GetDebtsInput(BaseModel):
 
 
 class GetDebtsTool(BaseTool):
-    name = "get_debts"
-    description = """Busca deudas pendientes de la empresa.
+    name: str = "get_debts"
+    description: str = """Busca deudas pendientes de la empresa.
     - company_id: ID de la empresa (requerido)
     - status: PENDING, PAID, OVERDUE
     - client_name: nombre del cliente a buscar
@@ -387,8 +387,8 @@ class GetPaymentsInput(BaseModel):
 
 
 class GetPaymentsTool(BaseTool):
-    name = "get_payments"
-    description = """Busca pagos, cobros y facturación de la empresa.
+    name: str = "get_payments"
+    description: str = """Busca pagos, cobros y facturación de la empresa.
     - company_id: ID de la empresa (requerido)
     - pet_name: nombre de la mascota para filtrar sus cobros
     - client_name: nombre del cliente para filtrar sus cobros

@@ -1,0 +1,42 @@
+graph LR
+    subgraph "PataSoft Backend"
+        BE[NestJS Backend api/v1]
+    end
+
+    subgraph "Pagos"
+        MP[MercadoPago<br/>Checkout QR Suscripciones Webhooks]
+    end
+
+    subgraph "Storage"
+        CL[Cloudinary<br/>Imagenes PDFs Facturas]
+    end
+
+    subgraph "Email"
+        MJ[Mailjet<br/>Transaccional Deudas Alertas]
+    end
+
+    subgraph "Auth"
+        GOOGLE[Google OAuth<br/>Login social]
+    end
+
+    subgraph "AI/ML"
+        GEMINI[Google Gemini<br/>Embeddings 768d]
+        GROQ[Groq<br/>Llama 3.3 70B Chat streaming]
+    end
+
+    subgraph "Job Queue"
+        BULL[BullMQ / Redis<br/>Documentos async RAG]
+    end
+
+    subgraph "Workflow"
+        N8N[n8n Webhooks<br/>Alertas deudas stock bienvenida]
+    end
+
+    BE -->|REST| MP
+    BE -->|REST| CL
+    BE -->|REST| MJ
+    BE -->|OAuth| GOOGLE
+    BE -->|REST| GEMINI
+    BE -->|REST| GROQ
+    BE --> BULL
+    BE -->|Webhook POST| N8N

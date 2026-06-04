@@ -1,0 +1,58 @@
+graph TB
+    HTTP[HTTP Request]
+    CORS[CORS whitelist]
+    HELMET[Helmet CSP + headers]
+    THROTTLE[ThrottlerGuard 100req/60s]
+    JWT_VALIDATE[JwtAuthGuard valida JWT]
+    PUBLIC{"Tiene Public?"}
+    SUB_CHECK["[Subscription activa?] cache 5min"]
+    OB_CHECK["[Tiene companyId?]"]
+    ROLE_CHECK[RolesGuard verifica UserRole]
+    DTO_VALIDATE[ValidationPipe class-validator]
+    TRANSFORM[class-transformer transform]
+    CONTROLLER[Controller maneja ruta]
+    SERVICE[Service logica de negocio]
+    PRISMA_CALL[Prisma model]
+    RAG_SYNC[upsertEmbedding background]
+    ORM[Prisma Query Engine]
+    DB[(PostgreSQL 15 + pgvector)]
+    RES[200/201 Response]
+    ERR_400[400 BadRequest]
+    ERR_403_SUB[403 SUBSCRIPTION_EXPIRED]
+    ERR_403_OB[403 ONBOARDING_REQUIRED]
+    ERR_403_ROLE[403 FORBIDDEN]
+    ERR_500[500 ExceptionFilter]
+
+    HTTP --> CORS
+    CORS --> HELMET
+    HELMET --> THROTTLE
+    THROTTLE --> JWT_VALIDATE
+    JWT_VALIDATE --> PUBLIC
+    PUBLIC -->|si| CONTROLLER
+    PUBLIC -->|no| SUB_CHECK
+    SUB_CHECK -->|valida| OB_CHECK
+    SUB_CHECK -->|expirada| ERR_403_SUB
+    OB_CHECK -->|ok| ROLE_CHECK
+    OB_CHECK -->|sin empresa| ERR_403_OB
+    ROLE_CHECK -->|rol ok| DTO_VALIDATE
+    ROLE_CHECK -->|no autorizado| ERR_403_ROLE
+    DTO_VALIDATE -->|valido| TRANSFORM
+    DTO_VALIDATE -->|invalido| ERR_400
+    TRANSFORM --> CONTROLLER
+    CONTROLLER --> SERVICE
+    SERVICE --> PRISMA_CALL
+    PRISMA_CALL --> ORM
+    ORM --> DB
+    DB --> ORM
+    ORM --> PRISMA_CALL
+    PRISMA_CALL -->|data| SERVICE
+    PRISMA_CALL -->|error| ERR_500
+    SERVICE -->|data| CONTROLLER
+    SERVICE --> RAG_SYNC
+    RAG_SYNC -->|background| ORM
+    CONTROLLER --> RES
+    ERR_400 --> RES
+    ERR_403_SUB --> RES
+    ERR_403_OB --> RES
+    ERR_403_ROLE --> RES
+    ERR_500 --> RES

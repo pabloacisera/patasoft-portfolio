@@ -2,7 +2,7 @@
 set -e
 
 echo "Ejecutando migraciones de base de datos..."
-npx prisma db push --accept-data-loss || true
+npx prisma migrate deploy
 
 echo "Iniciando servidor..."
 exec npm run start:prod

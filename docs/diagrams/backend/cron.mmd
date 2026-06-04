@@ -1,0 +1,17 @@
+gantt
+    title Cron Jobs Ejecucion diaria
+    dateFormat HH:mm
+    axisFormat %H:%M
+
+    section 08:00
+    Alertas de Deudas :cron1, 08:00, 30min
+
+    section 10:00
+    Verificar Suscripciones Expiradas :cron2, 10:00, 30min
+    Bloquear Empresas :cron2b, after cron2, 15min
+
+    section 14:00
+    Alertas de Stock Bajo :cron3, 14:00, 30min
+
+    section 16:00
+    Limpieza RefreshTokens Expirados :cron4, 16:00, 15min

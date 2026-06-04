@@ -9,6 +9,7 @@ export class AiProxyService {
   private readonly logger = new Logger(AiProxyService.name);
   private readonly scaleMode: string;
   private readonly aiBaseUrl: string;
+  private readonly aiApiKey: string | undefined;
   private localRagService: LocalRagService | null;
 
   constructor(
@@ -16,7 +17,8 @@ export class AiProxyService {
     private prisma: PrismaService,
     localRagService: LocalRagService,
   ) {
-    this.scaleMode = this.config.get<string>('SCALE_MODE') || 'PRO';
+    this.scaleMode = this.config.get<string>('SCALE_MODE') || 'local';
+    this.aiApiKey = this.config.get<string>('AI_SERVICE_API_KEY');
     
     if (this.scaleMode === 'PRO') {
       this.aiBaseUrl = this.config.get<string>('AI_SERVICE_URL') || 'http://localhost:8000';
@@ -25,6 +27,12 @@ export class AiProxyService {
       this.aiBaseUrl = '';
       this.localRagService = localRagService;
     }
+  }
+
+  private getHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
+    if (this.aiApiKey) headers['X-API-Key'] = this.aiApiKey;
+    return headers;
   }
 
   async chat(companyId: string, dto: ChatDto) {
@@ -141,7 +149,7 @@ export class AiProxyService {
     try {
       const response = await fetch(`${this.aiBaseUrl}/api/v1/rag/documents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders(),
         body: JSON.stringify({ companyId, documents }),
       });
       if (!response.ok) throw new InternalServerErrorException('Error al procesar documento');

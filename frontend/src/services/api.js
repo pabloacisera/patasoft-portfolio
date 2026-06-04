@@ -41,12 +41,19 @@ class ApiClient {
     if (response.status === 401 && retryCount < 1) {
       const isAuthEndpoint = EXCLUDED_PATHS.some(path => endpoint.startsWith(path));
       
-      if (!isAuthEndpoint) {
-        const refreshed = await this.refreshToken();
-        
-        if (refreshed) {
-          return this.request(endpoint, options, retryCount + 1);
-        }
+      if (isAuthEndpoint) {
+        let authMessage = 'Unauthorized';
+        try {
+          const data = await response.clone().json();
+          authMessage = data.message || authMessage;
+        } catch {}
+        throw new Error(authMessage);
+      }
+      
+      const refreshed = await this.refreshToken();
+      
+      if (refreshed) {
+        return this.request(endpoint, options, retryCount + 1);
       }
       
       logout();
@@ -62,7 +69,7 @@ class ApiClient {
         errorCode = data.error || null;
       } catch {}
 
-      if (response.status === 403 && message.includes('empresa')) {
+      if (response.status === 403 && (errorCode === 'ONBOARDING_REQUIRED' || message.includes('empresa'))) {
         // NO redirigir si ya estamos en onboarding (evita loop infinito)
         if (!window.location.pathname.startsWith('/onboarding')) {
           console.warn('[API] Usuario sin empresa, redirigiendo a onboarding...');
