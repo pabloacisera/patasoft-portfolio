@@ -1,14 +1,30 @@
 import { api } from '../../services/api.js';
 import { router } from '../../router.js';
 import { logout } from '../../stores/auth.store.js';
+import { escapeHtml } from '../../utils/escape.js';
+
+const PAGE_TITLES = {
+  home: 'Dashboard',
+  clients: 'Clientes',
+  pets: 'Mascotas',
+  'medical-records': 'Historial Médico',
+  payments: 'Pagos y Deudas',
+  supplies: 'Insumos',
+  chat: 'AI Chat',
+  connections: 'Conexiones',
+  'cash-register': 'Caja',
+  settings: 'Configuración',
+};
 
 export function renderDashboardLayout(user, currentPage, loadPageFn) {
   const app = document.getElementById('app');
   
   if (!app) return;
 
-  app.innerHTML = `
+  app.replaceChildren();
+  app.insertAdjacentHTML('beforeend', `
     <div class="dashboard-layout">
+      <a href="#page-content" class="skip-link">Saltar al contenido principal</a>
       <aside class="sidebar">
         <div class="sidebar-logo">PataSoft</div>
         <nav class="sidebar-nav">
@@ -29,16 +45,16 @@ export function renderDashboardLayout(user, currentPage, loadPageFn) {
               <line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
           </button>
-          <div class="page-title" id="page-title">Dashboard</div>
+          <div class="page-title" id="page-title">${PAGE_TITLES[currentPage] || 'Dashboard'}</div>
           <div class="user-menu">
-            <span>${user.name}</span>
-            <div class="user-avatar">${user.name.charAt(0).toUpperCase()}</div>
+            <span>${escapeHtml(user.name)}</span>
+            <div class="user-avatar">${escapeHtml(user.name.charAt(0).toUpperCase())}</div>
           </div>
         </header>
-        <main class="page-content" id="page-content"></main>
+        <main class="page-content" id="page-content" role="status" aria-live="polite"></main>
       </div>
     </div>
-  `;
+  `);
 
   setupNavListeners(currentPage, loadPageFn);
   setupSidebarToggle();
@@ -107,17 +123,8 @@ export function setupNavListeners(currentPage, loadPageFn) {
       item.classList.add('active');
       
       const titleEl = document.getElementById('page-title');
-      const titles = {
-        home: 'Dashboard', clients: 'Clientes', pets: 'Mascotas',
-        'medical-records': 'Historial Médico', payments: 'Pagos y Deudas',
-        supplies: 'Insumos', chat: 'AI Chat', connections: 'Conexiones',
-        'cash-register': 'Caja',
-        settings: 'Configuración',
-      };
-      if (titleEl) titleEl.textContent = titles[page] || 'Dashboard';
+      if (titleEl) titleEl.textContent = PAGE_TITLES[page] || 'Dashboard';
       
-      if (loadPageFn) loadPageFn(page);
-
       const href = item.getAttribute('href');
       if (href) router.navigate(href);
     });
@@ -168,7 +175,8 @@ export async function checkAndShowTrialBanner() {
       font-size: 14px; font-weight: 500; position: relative; z-index: 10;
       border-bottom: 1px solid rgba(0,0,0,0.1);
     `;
-    banner.innerHTML = `
+    banner.replaceChildren();
+    banner.insertAdjacentHTML('beforeend', `
       <div style="display:flex;align-items:center;gap:8px;">
         <span>⏳</span>
         <span>Período de prueba gratuita (72 horas) — Te quedan ${timeText} de acceso completo.</span>
@@ -180,7 +188,7 @@ export async function checkAndShowTrialBanner() {
         </button>
       </div>
       <span style="cursor:pointer;font-size:18px;line-height:1;padding:4px;" id="dismiss-trial-banner">✕</span>
-    `;
+    `);
     const mainContent = document.querySelector('.main-content');
     if (mainContent) mainContent.insertBefore(banner, mainContent.firstChild);
     

@@ -10,6 +10,7 @@ import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
     ConfigModule,
     PrismaModule,
     PdfModule,
+    // forwardRef necesario: dependencia circular QueuesModule <-> AiProxyModule
     forwardRef(() => AiProxyModule),
   ],
   providers: [DocumentProcessorService],

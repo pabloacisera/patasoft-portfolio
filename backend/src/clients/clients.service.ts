@@ -12,7 +12,7 @@ export class ClientsService {
     private rag: LocalRagService,
   ) {}
 
-  async findAll(companyId: string, pagination: { page?: number; limit?: number; search?: string } = {}) {
+  async findAll(companyId: number, pagination: { page?: number; limit?: number; search?: string } = {}) {
     const page = Number(pagination.page) || 1;
     const limit = Number(pagination.limit) || 20;
     const search = pagination.search;
@@ -45,7 +45,7 @@ export class ClientsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const client = await this.prisma.client.findFirst({
       where: { id, companyId },
       include: {
@@ -59,7 +59,22 @@ export class ClientsService {
     return client;
   }
 
-  async create(companyId: string, dto: CreateClientDto) {
+  async create(companyId: number, dto: CreateClientDto) {
+    // Validar duplicados por nombre + apellido + cuil
+    const existing = await this.prisma.client.findFirst({
+      where: {
+        companyId,
+        name: dto.name,
+        lastName: dto.lastName,
+        cuil: dto.cuil,
+        isDeleted: false,
+      }
+    });
+
+    if (existing) {
+      throw new BadRequestException('Ya existe un cliente con ese nombre y CUIL');
+    }
+
     const client = await this.prisma.client.create({
       data: {
         companyId,
@@ -86,7 +101,7 @@ export class ClientsService {
     return client;
   }
 
-  async update(id: string, companyId: string, dto: UpdateClientDto) {
+  async update(id: number, companyId: number, dto: UpdateClientDto) {
     await this.findOne(id, companyId);
 
     const client = await this.prisma.client.update({
@@ -113,7 +128,7 @@ export class ClientsService {
     return client;
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: number, companyId: number) {
     await this.findOne(id, companyId);
 
     const petsCount = await this.prisma.pet.count({ where: { clientId: id, isDeleted: false } });
@@ -130,14 +145,14 @@ export class ClientsService {
     this.logger.log(`Cliente eliminado (soft delete): ${id}`);
   }
 
-  async getPets(id: string, companyId: string) {
+  async getPets(id: number, companyId: number) {
     return this.prisma.pet.findMany({
       where: { clientId: id, companyId } as any,
       include: { photos: true },
     }).then(pets => pets.filter((p: any) => !p.isDeleted));
   }
 
-  async getPayments(id: string, companyId: string) {
+  async getPayments(id: number, companyId: number) {
     return this.prisma.payment.findMany({
       where: { clientId: id, companyId } as any,
       orderBy: { createdAt: 'desc' },
@@ -145,7 +160,7 @@ export class ClientsService {
     }).then(payments => payments.filter((p: any) => !p.isDeleted));
   }
 
-  async getDebts(id: string, companyId: string) {
+  async getDebts(id: number, companyId: number) {
     return this.prisma.debt.findMany({
       where: { clientId: id, companyId } as any,
       orderBy: { createdAt: 'desc' },

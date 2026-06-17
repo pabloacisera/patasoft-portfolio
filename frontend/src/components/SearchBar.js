@@ -14,7 +14,8 @@ export function createSearchBar(options) {
   if (showButton) {
     const button = document.createElement('button');
     button.className = 'search-button';
-    button.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 2.5 9.5 2.5S3 5.91 3 9.5 6.91 16 10.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
+    button.replaceChildren();
+    button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 2.5 9.5 2.5S3 5.91 3 9.5 6.91 16 10.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>');
     button.type = 'button';
     container.appendChild(button);
 
@@ -29,7 +30,8 @@ export function createSearchBar(options) {
   if (clearable && initialValue) {
     const clearBtn = document.createElement('button');
     clearBtn.className = 'search-clear';
-    clearBtn.innerHTML = '&times;';
+    clearBtn.replaceChildren();
+    clearBtn.insertAdjacentHTML('beforeend', '&times;');
     clearBtn.type = 'button';
     clearBtn.style.display = 'inline-flex';
     container.appendChild(clearBtn);

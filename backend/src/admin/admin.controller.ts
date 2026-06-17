@@ -5,6 +5,7 @@ import { AdminQueryDto, BlockCompanyDto } from './dto/admin.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('admin')
 @Controller('api/v1/admin')
@@ -22,13 +23,13 @@ export class AdminController {
 
   @Patch('companies/:id/block')
   @ApiOperation({ summary: 'Bloquear una empresa' })
-  blockCompany(@Param('id') id: string, @Body() dto: BlockCompanyDto) {
+  blockCompany(@Param('id', ParseHashIdPipe) id: number, @Body() dto: BlockCompanyDto) {
     return this.adminService.blockCompany(id, dto);
   }
 
   @Patch('companies/:id/unblock')
   @ApiOperation({ summary: 'Desbloquear una empresa' })
-  unblockCompany(@Param('id') id: string) {
+  unblockCompany(@Param('id', ParseHashIdPipe) id: number) {
     return this.adminService.unblockCompany(id);
   }
 

@@ -6,7 +6,10 @@ import { JwtService } from '@nestjs/jwt';
 import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [forwardRef(() => EventsModule)],
+  imports: [
+    // forwardRef necesario: dependencia circular SubscriptionsModule <-> EventsModule
+    forwardRef(() => EventsModule)
+  ],
   controllers: [SubscriptionsController],
   providers: [SubscriptionsService, PrismaService, JwtService],
   exports: [SubscriptionsService],

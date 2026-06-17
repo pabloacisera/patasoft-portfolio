@@ -5,33 +5,17 @@ import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { QueuesModule } from './queues/queues.module';
-import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { AdminModule } from './admin/admin.module';
 import { GuestModule } from './guest/guest.module';
-import { AiProxyModule } from './ai-proxy/ai-proxy.module';
 import { CronModule } from './cron/cron.module';
-import { CompaniesModule } from './companies/companies.module';
-import { ClientsModule } from './clients/clients.module';
-import { PetsModule } from './pets/pets.module';
-import { MedicalRecordsModule } from './medical-records/medical-records.module';
-import { PdfModule } from './documents/pdf.module';
-import { PaymentsModule } from './payments/payments.module';
-import { DebtsModule } from './debts/debts.module';
-import { SuppliesModule } from './supplies/supplies.module';
-import { PriceItemsModule } from './price-items/price-items.module';
-import { MercadopagoModule } from './mercadopago/mercadopago.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { EventsModule } from './events/events.module';
-import { MailModule } from './mail/mail.module';
-import { ConnectionsModule } from './connections/connections.module';
-import { CashRegisterModule } from './cash-register/cash-register.module';
 import { SuperAdminModule } from './superadmin/superadmin.module';
-import { SupplyPurchasesModule } from './supply-purchases/supply-purchases.module';
 import { DataModule } from './data/data.module';
+import { VeterinaryModule } from './common/modules/veterinary.module';
+import { IntegrationsModule } from './common/modules/integrations.module';
 
 @Module({
   imports: [
@@ -43,35 +27,23 @@ import { DataModule } from './data/data.module';
       ttl: parseInt(process.env.THROTTLE_TTL || '60000', 10),
       limit: parseInt(process.env.THROTTLE_LIMIT || '100', 10),
     }]),
+    // Infrastructure
     PrismaModule,
     RedisModule,
     QueuesModule,
-    CloudinaryModule,
     HealthModule,
+    // Auth & Users
     AuthModule,
     UsersModule,
     SubscriptionsModule,
-    AdminModule,
     GuestModule,
-    AiProxyModule,
-    CronModule,
-    CompaniesModule,
-    ClientsModule,
-    PetsModule,
-    MedicalRecordsModule,
-    PdfModule,
-    PaymentsModule,
-    DebtsModule,
-    SuppliesModule,
-    PriceItemsModule,
-    MercadopagoModule,
-    NotificationsModule,
-    EventsModule,
-    MailModule,
-    ConnectionsModule,
-    CashRegisterModule,
+    // Admin
+    AdminModule,
     SuperAdminModule,
-    SupplyPurchasesModule,
+    // Domain
+    VeterinaryModule,
+    IntegrationsModule,
+    CronModule,
     DataModule,
   ],
   providers: [

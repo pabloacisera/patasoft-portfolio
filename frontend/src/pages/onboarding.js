@@ -33,7 +33,8 @@ export async function renderOnboarding() {
     }
   }
 
-  app.innerHTML = getOnboardingLayout();
+  app.replaceChildren();
+  app.insertAdjacentHTML('beforeend', getOnboardingLayout());
 
   const form = createStepForm({
     steps: [
@@ -103,7 +104,8 @@ function getOnboardingLayout() {
 }
 
 function renderStep1(container) {
-  container.innerHTML = `
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
     <div class="form-row">
       <div class="form-group">
         <label class="form-label required">Nombre de la Empresa</label>
@@ -137,9 +139,9 @@ function renderStep1(container) {
     </div>
     <div class="form-group">
       <label class="form-label">Website</label>
-      <input type="url" class="form-input" id="company-website" placeholder="https://ejemplo.com">
+        <input type="url" class="form-input" id="company-website" placeholder="https://ejemplo.com">
     </div>
-  `;
+  `);
 }
 
 function validateStep1() {
@@ -197,7 +199,8 @@ function validateStep1() {
 function renderStep2(container) {
   const selected = window.onboardingData?.specialties || [];
 
-  container.innerHTML = `
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
     <p style="margin-bottom: 20px; color: var(--text-secondary);">
       Selecciona las especialidades de tu veterinaria:
     </p>
@@ -210,7 +213,7 @@ function renderStep2(container) {
       `).join('')}
     </div>
     <div class="field-error" id="specialties-error"></div>
-  `;
+  `);
 
   container.querySelectorAll('.specialty-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -256,7 +259,8 @@ function renderStep3(container) {
 
   const specialtyLabels = SPECIALTIES.filter(s => specialties.includes(s.id)).map(s => s.label).join(', ');
 
-  container.innerHTML = `
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
     <p style="margin-bottom: 20px;">Por favor confirmá los datos de tu empresa:</p>
 
     <div class="summary-card">
@@ -289,7 +293,7 @@ function renderStep3(container) {
         <span class="summary-value">${specialtyLabels || '-'}</span>
       </div>
     </div>
-  `;
+  `);
 }
 
 async function saveOnboardingData(data) {

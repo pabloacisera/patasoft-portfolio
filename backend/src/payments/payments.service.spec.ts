@@ -9,6 +9,7 @@ describe('PaymentsService', () => {
   let mockPdfService: any;
   let mockCashService: any;
   let mockDocumentProcessor: any;
+  let mockSuppliesService: any;
 
   const companyId = 'company-1';
 
@@ -36,8 +37,18 @@ describe('PaymentsService', () => {
       companyConfig: {
         findUnique: vi.fn().mockResolvedValue(null),
       },
-      $transaction: vi.fn().mockImplementation(async (queries) => {
-        return Promise.all(queries);
+      $transaction: vi.fn().mockImplementation(async (queriesOrFn) => {
+        if (typeof queriesOrFn === 'function') {
+          const tx = {
+            payment: mockPrisma.payment,
+            supply: mockPrisma.supply,
+            debt: mockPrisma.debt,
+            cashMovement: mockPrisma.cashMovement,
+            companyConfig: mockPrisma.companyConfig,
+          };
+          return queriesOrFn(tx);
+        }
+        return Promise.all(queriesOrFn);
       }),
     };
     mockMpService = {
@@ -54,7 +65,10 @@ describe('PaymentsService', () => {
     mockDocumentProcessor = {
       enqueuePdfJob: vi.fn().mockResolvedValue('job-id'),
     };
-    service = new PaymentsService(mockPrisma, mockMpService, mockPdfService, mockCashService, mockDocumentProcessor);
+    mockSuppliesService = {
+      deductStock: vi.fn().mockResolvedValue(undefined),
+    };
+    service = new PaymentsService(mockPrisma, mockMpService, mockPdfService, mockCashService, mockDocumentProcessor, mockSuppliesService);
   });
 
   describe('findAll', () => {
@@ -148,14 +162,10 @@ describe('PaymentsService', () => {
       };
       mockPrisma.payment.create.mockResolvedValue({ id: 'pay-1', totalAmount: 1000, items: [], status: 'PENDING' });
       mockPrisma.supply.findUnique.mockResolvedValue({ id: 'sup-1', name: 'Med', unitsPerStock: 1 });
-      mockPrisma.supply.update.mockResolvedValue({});
 
       await service.create(companyId, dto);
 
-      expect(mockPrisma.supply.update).toHaveBeenCalledWith({
-        where: { id: 'sup-1' },
-        data: { quantity: { decrement: 3 } },
-      });
+      expect(mockSuppliesService.deductStock).toHaveBeenCalledWith(companyId, 'sup-1', 3, expect.any(Object));
     });
 
     it('should create cash movement for CASH payment', async () => {

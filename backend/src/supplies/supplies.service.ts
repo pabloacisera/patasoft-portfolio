@@ -16,7 +16,7 @@ export class SuppliesService {
     private rag: LocalRagService,
   ) {}
 
-  async findAll(companyId: string, q: any = {}) {
+  async findAll(companyId: number, q: any = {}) {
     const { page = 1, limit = 20, search, category, lowStock } = q;
     const skip = (Number(page) - 1) * Number(limit);
     const where: any = { 
@@ -54,13 +54,13 @@ export class SuppliesService {
     };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const s = await this.prisma.supply.findFirst({ where: { id, companyId } });
     if (!s) throw new NotFoundException('Insumo no encontrado');
     return s;
   }
 
-  async create(companyId: string, dto: any) {
+  async create(companyId: number, dto: any) {
     const supply = await this.prisma.supply.create({
       data: { 
         companyId, 
@@ -89,7 +89,7 @@ export class SuppliesService {
     return supply;
   }
 
-  async update(id: string, companyId: string, dto: any) {
+  async update(id: number, companyId: number, dto: any) {
     await this.findOne(id, companyId);
     const supply = await this.prisma.supply.update({ 
       where: { id }, 
@@ -107,7 +107,7 @@ export class SuppliesService {
     return supply;
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: number, companyId: number) {
     await this.findOne(id, companyId);
     this.rag.deleteEmbedding(companyId, { source: 'supply', supplyId: id });
     await this.prisma.supply.update({
@@ -117,16 +117,16 @@ export class SuppliesService {
     this.logger.log(`Insumo eliminado (soft): ${id}`);
   }
 
-  async decreaseStock(id: string, companyId: string, qty: number, dispensingQty?: number) {
-    const supply = await this.findOne(id, companyId);
+  async deductStock(companyId: number, supplyId: number, quantity: number, tx?: any) {
+    const prisma = tx || this.prisma;
+    const supply = await prisma.supply.findUnique({ where: { id: supplyId } });
+    if (!supply) return null;
 
-    const amount = dispensingQty || qty;
-    const stockToDiscount = supply.unitsPerStock ? Math.ceil(amount / supply.unitsPerStock) : amount;
+    const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(quantity / supply.unitsPerStock) : quantity;
+    const newQty = Math.max(0, supply.quantity - stockUnitsUsed);
 
-    const newQty = Math.max(0, supply.quantity - stockToDiscount);
-
-    const updated = await this.prisma.supply.update({
-      where: { id },
+    const updated = await prisma.supply.update({
+      where: { id: supplyId },
       data: { quantity: newQty }
     });
 
@@ -140,10 +140,33 @@ export class SuppliesService {
       });
     }
 
+    this.logger.log(`Stock descontado: ${supply.name} -${stockUnitsUsed} (quedan ${newQty})`);
     return updated;
   }
 
-  async getLowStock(companyId: string) {
+  async decreaseStock(id: number, companyId: number, qty: number, dispensingQty?: number) {
+    const amount = dispensingQty || qty;
+    return this.deductStock(companyId, id, amount);
+  }
+
+  async restoreStock(companyId: number, supplyId: number, quantity: number, tx?: any) {
+    const prisma = tx || this.prisma;
+    const supply = await prisma.supply.findUnique({ where: { id: supplyId } });
+    if (!supply) return null;
+
+    const stockUnitsRestored = supply.unitsPerStock ? Math.ceil(quantity / supply.unitsPerStock) : quantity;
+    const newQty = supply.quantity + stockUnitsRestored;
+
+    const updated = await prisma.supply.update({
+      where: { id: supplyId },
+      data: { quantity: newQty }
+    });
+
+    this.logger.log(`Stock restaurado: ${supply.name} +${stockUnitsRestored} (total ${newQty})`);
+    return updated;
+  }
+
+  async getLowStock(companyId: number) {
     const supplies = await this.prisma.supply.findMany({
       where: { companyId, isActive: true }
     });
@@ -188,7 +211,7 @@ export class SuppliesService {
     return workbook.xlsx.writeBuffer();
   }
 
-  async exportExcel(companyId: string) {
+  async exportExcel(companyId: number) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     const supplies = await this.prisma.supply.findMany({
       where: { companyId },
@@ -212,7 +235,8 @@ export class SuppliesService {
     supplies.forEach(s => sheet.addRow(s));
 
     const buffer = await workbook.xlsx.writeBuffer() as unknown as Buffer;
-    const folder = `patasoft/${company.slug}/supplies`;
+    const slug = company?.slug || 'default';
+    const folder = `patasoft/${slug}/supplies`;
     
     const upload = await this.cloudinary.getClient().uploader.upload(`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${buffer.toString('base64')}`, {
       folder,
@@ -240,14 +264,14 @@ export class SuppliesService {
     return { url: upload.secure_url };
   }
 
-  async importFromExcel(companyId: string, buffer: Buffer | Uint8Array) {
+  async importFromExcel(companyId: number, buffer: Buffer | Uint8Array) {
     const workbook = new ExcelJS.Workbook();
     const bufferToUse = buffer instanceof Uint8Array ? Buffer.from(buffer) : buffer;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await workbook.xlsx.load(bufferToUse as any);
-    const sheet = workbook.getWorksheet(1);
-    
     const results = { imported: 0, errors: [] as string[] };
+    const sheet = workbook.getWorksheet(1);
+    if (!sheet) return results;
     
     for (let i = 2; i <= sheet.rowCount; i++) {
       const row = sheet.getRow(i);
@@ -275,6 +299,18 @@ export class SuppliesService {
         } else {
           await this.prisma.supply.create({ data: { companyId, name, ...data } });
         }
+
+        const savedSupply = existing
+          ? await this.prisma.supply.findUnique({ where: { id: existing.id } })
+          : await this.prisma.supply.findFirst({ where: { name, companyId } });
+
+        if (savedSupply) {
+          this.rag.upsertEmbedding(companyId,
+            `${savedSupply.name} | marca ${savedSupply.brand || 'ND'} | stock ${savedSupply.quantity} ${savedSupply.unit || 'unidades'} | precio $${savedSupply.unitPrice} | stock min ${savedSupply.minQuantity || 10}`,
+            { source: 'supply', supplyId: savedSupply.id, name: savedSupply.name, quantity: savedSupply.quantity }
+          );
+        }
+
         results.imported++;
       } catch (e) {
         results.errors.push(`Fila ${i}: ${e.message}`);

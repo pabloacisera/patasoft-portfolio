@@ -1,16 +1,16 @@
-import { IsString, IsOptional, IsNumber, IsUUID, IsEnum, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsEnum, IsDateString } from 'class-validator';
 
 export class CreatePaymentDto {
-  @IsUUID() clientId?: string;
-  @IsUUID() petId?: string;
-  @IsUUID() medicalRecordId?: string;
+  @IsInt() clientId?: number;
+  @IsInt() petId?: number;
+  @IsInt() medicalRecordId?: number;
   @IsNumber() totalAmount: number;
   @IsEnum(['PENDING', 'PARTIAL', 'PAID', 'DEFERRED', 'CANCELLED', 'OVERDUE']) status?: string;
   @IsEnum(['CASH', 'TRANSFER', 'MP_QR', 'MP_CHECKOUT', 'CHECK', 'OTHER']) method?: string;
   @IsDateString() dueDate?: string;
   @IsString() notes?: string;
   @IsOptional() @IsNumber() interestRate?: number; // % mensual
-  items?: { description: string; quantity: number; unitPrice: number; totalPrice: number; itemType?: string; supplyId?: string }[];
+  items?: { description: string; quantity: number; unitPrice: number; totalPrice: number; itemType?: string; supplyId?: number }[];
 }
 
 export class UpdatePaymentDto {

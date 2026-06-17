@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Query, Param, UseGuards } f
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 import { CashRegisterService } from './cash-register.service';
 import { CreateCashMovementDto, UpdateCashMovementDto, CashSummaryQueryDto } from './dto/cash-movement.dto';
 
@@ -32,13 +33,13 @@ export class CashRegisterController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Editar movimiento de caja' })
-  async update(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdateCashMovementDto) {
+  async update(@CurrentUser() user: any, @Param('id', ParseHashIdPipe) id: number, @Body() dto: UpdateCashMovementDto) {
     return this.cashService.update(user.companyId, id, dto);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar movimiento de caja' })
-  async remove(@CurrentUser() user: any, @Param('id') id: string) {
+  async remove(@CurrentUser() user: any, @Param('id', ParseHashIdPipe) id: number) {
     return this.cashService.remove(user.companyId, id);
   }
 }

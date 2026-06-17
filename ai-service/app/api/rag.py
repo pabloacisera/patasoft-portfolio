@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -34,8 +35,9 @@ class QueryResponse(BaseModel):
 # Directorio persistente para Chroma
 CHROMA_PATH = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
 
-# Memoria en runtime para vectorstores
-vectorstores = {}
+# Cache LRU para vectorstores (max 100 empresas)
+MAX_VECTORSTORES = 100
+vectorstores = OrderedDict()
 
 def get_embeddings():
     emb_model = os.getenv("EMBEDDINGS_MODEL", "gemini-embedding-001")
@@ -54,18 +56,22 @@ def get_vectorstore(companyId: str, embeddings=None):
     
     collection_name = get_collection_name(companyId)
     
-    # Si ya existe en memoria, retornarlo
+    # Si ya existe en memoria, mover al final (LRU) y retornar
     if companyId in vectorstores:
+        vectorstores.move_to_end(companyId)
         return vectorstores[companyId]
     
     # Intentar cargar desde disco persistente
     try:
         vs = Chroma(
-            client=Chroma.extract_file_path(CHROMA_PATH),
+            persist_directory=CHROMA_PATH,
             collection_name=collection_name,
             embedding_function=embeddings,
         )
         vectorstores[companyId] = vs
+        vectorstores.move_to_end(companyId)
+        if len(vectorstores) > MAX_VECTORSTORES:
+            vectorstores.popitem(last=False)
         return vs
     except:
         pass
@@ -78,6 +84,9 @@ def get_vectorstore(companyId: str, embeddings=None):
         persist_directory=CHROMA_PATH,
     )
     vectorstores[companyId] = vs
+    vectorstores.move_to_end(companyId)
+    if len(vectorstores) > MAX_VECTORSTORES:
+        vectorstores.popitem(last=False)
     return vs
 
 
@@ -118,6 +127,9 @@ async def add_documents(request: AddDocumentsRequest):
         
         # Guardar en memoria para rápido acceso
         vectorstores[company_id] = vs
+        vectorstores.move_to_end(company_id)
+        if len(vectorstores) > MAX_VECTORSTORES:
+            vectorstores.popitem(last=False)
         
         return {
             "added": len(request.documents), 
@@ -180,6 +192,12 @@ Documentos:
 {context}
 
 Pregunta: {request.query}
+
+INSTRUCCIONES CRÍTICAS:
+- Si la pregunta es sobre DATOS factibles (stock, precios, procedimientos registrados, historial): si no está en los documentos, respondé: "No tengo esa información en los datos de la veterinaria."
+- Si la pregunta es CLÍNICA (síntomas, diagnóstico, tratamiento, pronóstico): NUNCA digas "no sé" ni "no tengo información". En su lugar, indicá qué estudios complementarios solicitar (hemograma, bioquímica, Rx, ecografía, etc.), qué preguntas hacer al tutor, o qué pasos de diagnóstico diferencial seguir.
+- No uses frases como "como veterinario con X años de experiencia".
+- Respondé en español argentino, claro y directo.
 
 Respuesta:"""
         

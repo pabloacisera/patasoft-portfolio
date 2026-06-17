@@ -4,6 +4,7 @@ import { Response } from 'express';
 import { PdfService } from './pdf.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('documents')
 @ApiBearerAuth()
@@ -14,16 +15,15 @@ export class PdfController {
 
   @Get(':id/document')
   async generatePetDocument(
-    @Param('id') petId: string,
+    @Param('id', ParseHashIdPipe) petId: number,
     @CurrentUser() user: any,
     @Res() res: Response,
   ) {
-    // Use generateMedicalHistory for complete medical history
     const pdf = await this.pdfService.generateMedicalHistory(petId, user.companyId);
     
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="historia-completa-${petId.slice(-6)}.pdf"`,
+      'Content-Disposition': `attachment; filename="historia-completa-${petId}.pdf"`,
     });
     
     res.send(pdf);

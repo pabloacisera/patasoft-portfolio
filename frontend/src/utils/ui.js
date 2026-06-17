@@ -1,5 +1,6 @@
 export function showBlockedFullScreen(reason) {
-  document.body.innerHTML = `
+  document.body.replaceChildren();
+  document.body.insertAdjacentHTML('beforeend', `
     <div style="display:flex;flex-direction:column;align-items:center;
       justify-content:center;height:100vh;gap:20px;font-family:sans-serif;
       background:#0f172a;color:white;text-align:center;padding:24px;">
@@ -22,7 +23,7 @@ export function showBlockedFullScreen(reason) {
         </a>
       </div>
     </div>
-  `;
+  `);
 }
 
 export function showBlockedBanner(reason) {
@@ -37,7 +38,7 @@ export function showBlockedBanner(reason) {
     display:flex;align-items:center;justify-content:center;gap:12px;
     flex-wrap:wrap;
   `;
-  banner.innerHTML = `
+  banner.insertAdjacentHTML('beforeend', `
     <span>🔒 ${reason}</span>
     <a href="/settings/subscription"
        style="background:white;color:#991b1b;padding:4px 16px;
@@ -50,6 +51,6 @@ export function showBlockedBanner(reason) {
        border:1px solid rgba(255,255,255,0.4);">
       Descargar mis datos
     </a>
-  `;
+  `);
   document.body.prepend(banner);
 }

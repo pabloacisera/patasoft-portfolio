@@ -1,4 +1,5 @@
 import { api } from '../../services/api.js';
+import { escapeHtml } from '../../utils/escape.js';
 import { formatCurrency } from '../../utils/formatters.js';
 import { showFieldError } from '../../utils/validators.js';
 import { createSearchBar } from '../../components/SearchBar.js';
@@ -6,14 +7,19 @@ import { createPagination } from '../../components/Pagination.js';
 import { openModal } from '../../components/Modal.js';
 import { showToast } from '../../components/Toast.js';
 
+let suppliesController = null;
+
 export async function loadSuppliesData(pageData, page = 1, search = '') {
+  if (suppliesController) suppliesController.abort();
+  suppliesController = new AbortController();
   try {
     const params = { page, limit: 20 };
     if (search) params.search = search;
     
-    const result = await api.get('/supplies', params);
+    const result = await api.get('/supplies', params, { signal: suppliesController.signal });
     pageData.supplies = { ...result, page, search };
   } catch (e) {
+    if (e.name === 'AbortError') return;
     pageData.supplies = { data: [], meta: { total: 0 }, page, search };
   }
 }
@@ -21,7 +27,8 @@ export async function loadSuppliesData(pageData, page = 1, search = '') {
 export async function renderSuppliesPage(content, pageData) {
   const data = pageData.supplies || { data: [], meta: { total: 0 } };
   
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <div class="page-header">
       <div id="search-supplies"></div>
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -36,7 +43,7 @@ export async function renderSuppliesPage(content, pageData) {
     </div>
     <div id="supplies-list"></div>
     <div id="supplies-pagination"></div>
-  `;
+  `);
   
   const searchBar = createSearchBar({
     placeholder: 'Buscar insumos...',
@@ -78,10 +85,10 @@ export async function renderSuppliesPage(content, pageData) {
     formData.append('file', file);
     try {
       const result = await api.postFormData('/supplies/import', formData);
-      showToast(`✅ ${result.imported || result.created} insumos importados correctamente`, 'success');
+      showToast(`✅ ${escapeHtml(result.imported || result.created)} insumos importados correctamente`, 'success');
       if (result.errors?.length) {
         console.warn('Errores de importación:', result.errors);
-        showToast(`⚠️ ${result.errors.length} filas con errores (ver consola)`, 'warning');
+        showToast(`⚠️ ${escapeHtml(result.errors.length)} filas con errores (ver consola)`, 'warning');
       }
       await loadSuppliesData(pageData, 1, pageData.supplies?.search || ''); 
       renderSuppliesPage(document.getElementById('page-content'), pageData);
@@ -91,30 +98,32 @@ export async function renderSuppliesPage(content, pageData) {
   
   const listEl = document.getElementById('supplies-list');
   if (data.data?.length) {
-    listEl.innerHTML = `
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Nombre</th><th>Marca</th><th>Stock</th><th>Precio</th><th>Estado</th></tr></thead>
         <tbody>${data.data.map(s => {
           const isLow = s.quantity <= (s.minQuantity || 10);
           return `
             <tr>
-              <td>${s.name}</td>
-              <td>${s.brand || '-'}</td>
-              <td>${s.quantity}</td>
+              <td>${escapeHtml(s.name)}</td>
+              <td>${escapeHtml(s.brand || '-')}</td>
+              <td>${escapeHtml(s.quantity)}</td>
               <td>${formatCurrency(s.unitPrice)}</td>
               <td><span class="badge badge-${isLow ? 'danger' : 'success'}">${isLow ? 'Bajo stock' : 'OK'}</span></td>
             </tr>
           `;
         }).join('')}</tbody>
       </table>
-    `;
+    `);
   } else {
-    listEl.innerHTML = '<div class="empty-state"><p>No hay insumos</p></div>';
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay insumos</p></div>');
   }
   
   const paginationEl = document.getElementById('supplies-pagination');
   if (paginationEl && data.meta?.totalPages > 1) {
-    paginationEl.innerHTML = '';
+    paginationEl.replaceChildren();
     const pagination = createPagination({
       total: data.meta.total,
       page: data.page || 1,

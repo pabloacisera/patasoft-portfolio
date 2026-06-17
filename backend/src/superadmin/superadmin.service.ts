@@ -19,7 +19,7 @@ export class SuperAdminService {
     });
   }
 
-  async updateCompanySubscription(companyId: string, dto: any) {
+  async updateCompanySubscription(companyId: number, dto: any) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       include: { subscription: true },
@@ -80,11 +80,11 @@ export class SuperAdminService {
     return this.getGlobalConfig();
   }
 
-  async getCompanyPaymentHistory(companyId: string) {
+  async getCompanyPaymentHistory(companyId: number) {
     return this.prisma.payment.findMany({
       where: { companyId } as any,
       orderBy: { createdAt: 'desc' },
       include: { client: true, items: true },
-    }).then((payments: any) => payments.filter(p => !p.isDeleted));
+    }).then((payments: any) => payments.filter((p: any) => !p.isDeleted));
   }
 }

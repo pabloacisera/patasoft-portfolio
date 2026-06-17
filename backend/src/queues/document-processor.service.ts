@@ -84,7 +84,7 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
   }
 
   async enqueueDocument(data: {
-    companyId: string;
+    companyId: number;
     fileName: string;
     fileBuffer: Buffer;
     mimeType: string;
@@ -97,10 +97,10 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
   }
 
   async enqueuePdfJob(data: {
-    companyId: string;
+    companyId: number;
     pdfType: 'prescription' | 'receipt';
-    recordId?: string;
-    paymentId?: string;
+    recordId?: number;
+    paymentId?: number;
   }): Promise<string> {
     const payload = { jobType: 'pdf', ...data };
 
@@ -118,7 +118,7 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
       backoff: { type: 'exponential', delay: 5000 },
     });
     await queue.close();
-    return job.id.toString();
+    return job.id?.toString() || '';
   }
 
   private async enqueueWithPQueue(data: any): Promise<string> {
@@ -144,7 +144,7 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
     return jobId;
   }
 
-  private async processPdf(companyId: string, pdfType: 'prescription' | 'receipt', recordId?: string, paymentId?: string) {
+  private async processPdf(companyId: number, pdfType: 'prescription' | 'receipt', recordId?: number, paymentId?: number) {
     try {
       if (pdfType === 'prescription' && recordId) {
         await this.pdfService.generateAndStorePrescription(recordId, companyId);
@@ -159,7 +159,7 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async processDocument(companyId: string, fileName: string, buffer: Buffer, mimeType: string) {
+  private async processDocument(companyId: number, fileName: string, buffer: Buffer, mimeType: string) {
     try {
       if (mimeType.includes('spreadsheet') || fileName.match(/\.(xlsx?|csv)$/)) {
         await this.processExcel(companyId, buffer, fileName);
@@ -177,7 +177,7 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async processExcel(companyId: string, buffer: Buffer, fileName: string) {
+  private async processExcel(companyId: number, buffer: Buffer, fileName: string) {
     const workbook = XLSX.read(buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
@@ -197,7 +197,7 @@ export class DocumentProcessorService implements OnModuleInit, OnModuleDestroy {
 
     if (priceItems.length > 0) {
       await this.prisma.priceItem.createMany({
-        data: priceItems,
+        data: priceItems as any,
         skipDuplicates: true,
       });
       this.logger.log(`Created ${priceItems.length} price items from Excel`);

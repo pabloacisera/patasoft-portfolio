@@ -17,7 +17,7 @@ export class PriceItemsService {
     private rag: LocalRagService,
   ) {}
 
-  async findAll(companyId: string, q: any = {}) {
+  async findAll(companyId: number, q: any = {}) {
     const { page = 1, limit = 20, search, category } = q;
     const skip = (Number(page) - 1) * Number(limit);
     
@@ -62,13 +62,13 @@ export class PriceItemsService {
     };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const item = await this.prisma.priceItem.findFirst({ where: { id, companyId } });
     if (!item) throw new NotFoundException('Item de precio no encontrado');
     return item;
   }
 
-  async create(companyId: string, d: any) {
+  async create(companyId: number, d: any) {
     const item = await this.prisma.priceItem.create({ 
       data: { 
         companyId, 
@@ -88,7 +88,7 @@ export class PriceItemsService {
     return item;
   }
 
-  async update(id: string, companyId: string, d: any) {
+  async update(id: number, companyId: number, d: any) {
     await this.findOne(id, companyId);
     const item = await this.prisma.priceItem.update({ where: { id }, data: d });
 
@@ -100,7 +100,7 @@ export class PriceItemsService {
     return item;
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: number, companyId: number) {
     await this.findOne(id, companyId);
     this.rag.deleteEmbedding(companyId, { source: 'price', priceId: id });
     return this.prisma.priceItem.delete({ where: { id } });
@@ -120,7 +120,7 @@ export class PriceItemsService {
     return workbook.xlsx.writeBuffer();
   }
 
-  async exportExcel(companyId: string) {
+  async exportExcel(companyId: number) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     const items = await this.prisma.priceItem.findMany({
       where: { companyId },
@@ -140,7 +140,8 @@ export class PriceItemsService {
     items.forEach(item => sheet.addRow(item));
 
     const buffer = await workbook.xlsx.writeBuffer() as unknown as Buffer;
-    const folder = `patasoft/${company.slug}/documents`;
+    const slug = company?.slug || 'default';
+    const folder = `patasoft/${slug}/documents`;
     
     const upload = await this.cloudinary.getClient().uploader.upload(
       `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${buffer.toString('base64')}`, 
@@ -171,13 +172,13 @@ export class PriceItemsService {
     return { url: upload.secure_url };
   }
 
-  async importFromExcel(companyId: string, buffer: Buffer | Uint8Array) {
+  async importFromExcel(companyId: number, buffer: Buffer | Uint8Array) {
     const workbook = new ExcelJS.Workbook();
     const bufferToUse = buffer instanceof Uint8Array ? Buffer.from(buffer) : buffer;
     await workbook.xlsx.load(bufferToUse as any);
+    const results = { imported: 0, errors: [] as string[] };
     const sheet = workbook.getWorksheet(1);
-    
-    const results = { imported: 0, errors: [] };
+    if (!sheet) return results;
 
     for (let i = 2; i <= sheet.rowCount; i++) {
       const row = sheet.getRow(i);
@@ -196,11 +197,18 @@ export class PriceItemsService {
           description: row.getCell(4).text,
         };
 
+        let item;
         if (existing) {
-          await this.prisma.priceItem.update({ where: { id: existing.id }, data });
+          item = await this.prisma.priceItem.update({ where: { id: existing.id }, data });
         } else {
-          await this.prisma.priceItem.create({ data: { ...data, companyId } });
+          item = await this.prisma.priceItem.create({ data: { ...data, companyId } });
         }
+
+        this.rag.upsertEmbedding(companyId,
+          `Precio: ${item.name}. Categoría: ${item.category || 'N/A'}. Precio: $${item.price}. Descripción: ${item.description || 'N/A'}.`,
+          { source: 'price', priceId: item.id, name: item.name }
+        );
+
         results.imported++;
       } catch (e) {
         results.errors.push(`Fila ${i}: ${e.message}`);

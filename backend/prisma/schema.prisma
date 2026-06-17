@@ -8,7 +8,7 @@ datasource db {
 }
 
 model Company {
-  id                String              @id @default(cuid())
+  id                Int                 @id @default(autoincrement())
   name              String
   slug              String              @unique
   legalName         String?
@@ -44,8 +44,8 @@ model Company {
 }
 
 model CompanyConfig {
-  id                 String   @id @default(cuid())
-  companyId          String   @unique
+  id                 Int      @id @default(autoincrement())
+  companyId          Int      @unique
   currency           String   @default("ARS")
   defaultAIModel     String   @default("llama-3.3-70b-versatile")
   lowStockDefaultPct Int      @default(10)
@@ -65,34 +65,36 @@ model CompanyConfig {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
+  id            Int         @id @default(autoincrement())
+  email         String      @unique
   passwordHash  String?
   name          String
-  role          UserRole       @default(USER)
-  googleId      String?        @unique
+  role          UserRole    @default(USER)
+  googleId      String?     @unique
   avatarUrl     String?
-  isActive      Boolean        @default(true)
-  companyId     String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  isActive      Boolean     @default(true)
+  companyId     Int?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
   notifications Notification[]
   refreshTokens RefreshToken[]
-  company       Company?       @relation(fields: [companyId], references: [id])
+  company       Company?    @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id        Int      @id @default(autoincrement())
   token     String   @unique
-  userId    String
+  userId    Int
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Subscription {
-  id               String             @id @default(cuid())
-  companyId        String             @unique
+  id               Int                @id @default(autoincrement())
+  companyId        Int                @unique
   plan             SubscriptionPlan
   status           SubscriptionStatus @default(TRIAL)
   mpSubscriptionId String?
@@ -107,8 +109,8 @@ model Subscription {
 }
 
 model Client {
-  id          String    @id @default(cuid())
-  companyId   String
+  id          Int       @id @default(autoincrement())
+  companyId   Int
   name        String
   lastName    String?
   dni         String?
@@ -127,12 +129,16 @@ model Client {
   debts       Debt[]
   payments    Payment[]
   pets        Pet[]
+
+  @@index([companyId])
+  @@index([isDeleted])
+  @@unique([companyId, name, lastName, cuil])
 }
 
 model Pet {
-  id             String          @id @default(cuid())
-  companyId      String
-  clientId       String?
+  id             Int             @id @default(autoincrement())
+  companyId      Int
+  clientId       Int?
   name           String
   species        String
   breed          String?
@@ -152,11 +158,14 @@ model Pet {
   client         Client?         @relation(fields: [clientId], references: [id])
   company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   photos         PetPhoto[]
+
+  @@index([companyId])
+  @@index([isDeleted])
 }
 
 model PetPhoto {
-  id            String   @id @default(cuid())
-  petId         String
+  id            Int      @id @default(autoincrement())
+  petId         Int
   cloudinaryUrl String
   cloudinaryId  String
   isPrimary     Boolean  @default(false)
@@ -165,47 +174,51 @@ model PetPhoto {
 }
 
 model MedicalRecord {
-  id             String         @id @default(cuid())
-  petId          String
-  date           DateTime       @default(now())
-  visitReason    String
-  diagnosis      String?
-  treatment      String?
-  observations   String?
-  weight         Float?
-  temperature    Float?
-  nextVisitDate  DateTime?
-  veterinarianId String?
-  audioNoteUrl   String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  deletedAt      DateTime?
-  isDeleted      Boolean        @default(false)
-  pet            Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
-  payment        Payment?
-  prescriptions  Prescription[]
-  procedures     Procedure[]
+  id               Int            @id @default(autoincrement())
+  petId            Int
+  date             DateTime       @default(now())
+  visitReason      String
+  diagnosis        String?
+  treatment        String?
+  observations     String?
+  weight           Float?
+  temperature      Float?
+  nextVisitDate    DateTime?
+  veterinarianId   Int?
+  veterinarianName String?
+  audioNoteUrl     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+  isDeleted        Boolean        @default(false)
+  pet              Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
+  payment          Payment?
+  prescriptions    Prescription[]
+  procedures       Procedure[]
+
+  @@index([petId])
+  @@index([isDeleted])
 }
 
 model Procedure {
-  id              String        @id @default(cuid())
-  medicalRecordId String
+  id              Int           @id @default(autoincrement())
+  medicalRecordId Int
   name            String
   description     String?
-  priceItemId     String?
+  priceItemId     Int?
   customPrice     Float?
   quantity        Int           @default(1)
   createdAt       DateTime      @default(now())
-  supplyId        String?
+  supplyId        Int?
   medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
   priceItem       PriceItem?    @relation(fields: [priceItemId], references: [id])
   supply          Supply?       @relation(fields: [supplyId], references: [id])
 }
 
 model Prescription {
-  id                 String        @id @default(cuid())
-  medicalRecordId    String
-  supplyId           String?
+  id                 Int           @id @default(autoincrement())
+  medicalRecordId    Int
+  supplyId           Int?
   medicineName       String
   dose               String?
   frequency          String?
@@ -222,8 +235,8 @@ model Prescription {
 }
 
 model PriceItem {
-  id          String      @id @default(cuid())
-  companyId   String
+  id          Int         @id @default(autoincrement())
+  companyId   Int
   name        String
   category    String
   price       Float
@@ -236,8 +249,8 @@ model PriceItem {
 }
 
 model PaymentItem {
-  id          String   @id @default(cuid())
-  paymentId   String
+  id          Int      @id @default(autoincrement())
+  paymentId   Int
   description String
   quantity    Int      @default(1)
   unitPrice   Float
@@ -248,11 +261,11 @@ model PaymentItem {
 }
 
 model Payment {
-  id              String         @id @default(cuid())
-  companyId       String
-  clientId        String?
-  petId           String?
-  medicalRecordId String?        @unique
+  id              Int            @id @default(autoincrement())
+  companyId       Int
+  clientId        Int?
+  petId           Int?
+  medicalRecordId Int?           @unique
   totalAmount     Float
   paidAmount      Float          @default(0)
   status          PaymentStatus  @default(PENDING)
@@ -273,20 +286,24 @@ model Payment {
   medicalRecord   MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
   pet             Pet?           @relation(fields: [petId], references: [id])
   items           PaymentItem[]
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([isDeleted])
 }
 
 model Debt {
-  id             String     @id @default(cuid())
-  companyId      String
-  clientId       String
-  paymentId      String?    @unique
+  id             Int      @id @default(autoincrement())
+  companyId      Int
+  clientId       Int
+  paymentId      Int?     @unique
   amount         Float
   status         DebtStatus @default(PENDING)
   dueDate        DateTime
   alertSent1Day  Boolean    @default(false)
   alertSent2Day  Boolean    @default(false)
   cancelledAt    DateTime?
-  cancelledBy    String?
+  cancelledBy    Int?
   paidAt         DateTime?
   cloudinaryUrl  String?
   notes          String?
@@ -299,11 +316,14 @@ model Debt {
   client         Client     @relation(fields: [clientId], references: [id])
   company        Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   payment        Payment?   @relation("DebtPayment", fields: [paymentId], references: [id])
+
+  @@index([companyId])
+  @@index([isDeleted])
 }
 
 model Supply {
-  id             String           @id @default(cuid())
-  companyId      String
+  id             Int              @id @default(autoincrement())
+  companyId      Int
   name           String
   brand          String?
   category       String?
@@ -327,28 +347,34 @@ model Supply {
   procedures     Procedure[]
   company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   purchases      SupplyPurchase[]
+
+  @@index([companyId])
+  @@index([companyId, quantity])
+  @@index([isDeleted])
 }
 
 model Document {
-  id              String       @id @default(cuid())
-  companyId       String
+  id              Int          @id @default(autoincrement())
+  companyId       Int
   type            DocumentType
   name            String
   cloudinaryUrl   String
   cloudinaryId    String
   folder          String
-  relatedEntityId String?
+  relatedEntityId Int?
   relatedEntity   String?
   createdAt       DateTime     @default(now())
   deletedAt       DateTime?
   isDeleted       Boolean      @default(false)
   company         Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([isDeleted])
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  companyId String
-  userId    String?
+  id        Int              @id @default(autoincrement())
+  companyId Int
+  userId    Int?
   type      NotificationType
   title     String
   message   String
@@ -358,14 +384,17 @@ model Notification {
   createdAt DateTime         @default(now())
   company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user      User?            @relation(fields: [userId], references: [id])
+
+  @@index([companyId])
+  @@index([companyId, isRead])
 }
 
 model CompanyConnection {
-  id          String           @id @default(cuid())
-  companyAId  String
-  companyBId  String
+  id          Int              @id @default(autoincrement())
+  companyAId  Int
+  companyBId  Int
   status      ConnectionStatus @default(PENDING)
-  requestedBy String
+  requestedBy Int
   respondedAt DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -376,32 +405,33 @@ model CompanyConnection {
 }
 
 model CashMovement {
-  id        String           @id @default(cuid())
-  companyId String
+  id        Int              @id @default(autoincrement())
+  companyId Int
   type      CashMovementType
   amount    Float
   reason    String?
-  paymentId String?
-  createdBy String?
-  date      DateTime         @default(now())
+  paymentId Int?
+  createdBy Int?
   createdAt DateTime         @default(now())
   company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   payment   Payment?         @relation("CashMovementPayment", fields: [paymentId], references: [id])
+
+  @@index([companyId])
 }
 
 model GlobalConfig {
-  id          String   @id @default(cuid())
+  id          Int      @id @default(autoincrement())
   key         String   @unique
   value       String
   description String?
-  updatedBy   String?
+  updatedBy   Int?
   updatedAt   DateTime @default(now())
 }
 
 model SupplyPurchase {
-  id          String   @id @default(cuid())
-  companyId   String
-  supplyId    String
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  supplyId    Int
   quantity    Int
   unitCost    Float
   totalCost   Float

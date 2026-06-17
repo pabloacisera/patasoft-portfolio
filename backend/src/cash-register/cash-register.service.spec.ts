@@ -43,9 +43,9 @@ describe('CashRegisterService', () => {
       await service.findAll(companyId, { date: '2026-05-29' });
 
       const where = mockPrisma.cashMovement.findMany.mock.calls[0][0].where;
-      expect(where.date).toBeDefined();
-      expect(where.date.gte).toBeInstanceOf(Date);
-      expect(where.date.lt).toBeInstanceOf(Date);
+      expect(where.createdAt).toBeDefined();
+      expect(where.createdAt.gte).toBeInstanceOf(Date);
+      expect(where.createdAt.lt).toBeInstanceOf(Date);
     });
 
     it('should filter by type', async () => {

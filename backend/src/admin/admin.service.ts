@@ -57,7 +57,7 @@ export class AdminService {
     };
   }
 
-  async blockCompany(id: string, dto: BlockCompanyDto) {
+  async blockCompany(id: number, dto: BlockCompanyDto) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) throw new NotFoundException('Empresa no encontrada');
 
@@ -73,7 +73,7 @@ export class AdminService {
     return updated;
   }
 
-  async unblockCompany(id: string) {
+  async unblockCompany(id: number) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) throw new NotFoundException('Empresa no encontrada');
 

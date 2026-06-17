@@ -129,6 +129,28 @@ describe('LocalRagService', () => {
 
       await expect(service.upsertEmbedding(companyId, 'test', {})).resolves.not.toThrow();
     });
+
+    it('should not throw and log error when embed() fails', async () => {
+      (service as any).ai.models.embedContent.mockRejectedValueOnce(new Error('Gemini down'));
+      const loggerErrorSpy = vi.spyOn(service['logger'], 'error');
+
+      await expect(service.upsertEmbedding(companyId, 'test content', { source: 'test' })).resolves.not.toThrow();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('upsertEmbedding failed for company')
+      );
+    });
+
+    it('should not throw and log error when DB query fails', async () => {
+      mockClient.query.mockRejectedValueOnce(new Error('DB connection failed'));
+      const loggerErrorSpy = vi.spyOn(service['logger'], 'error');
+
+      await expect(service.upsertEmbedding(companyId, 'test content', { source: 'test' })).resolves.not.toThrow();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('upsertEmbedding failed for company')
+      );
+    });
   });
 
   describe('deleteEmbedding', () => {
@@ -143,6 +165,17 @@ describe('LocalRagService', () => {
       (service as any).isInitialized = false;
 
       await expect(service.deleteEmbedding(companyId, { source: 'test' })).resolves.not.toThrow();
+    });
+
+    it('should not throw and log error when DB query fails', async () => {
+      mockClient.query.mockRejectedValueOnce(new Error('DB connection failed'));
+      const loggerErrorSpy = vi.spyOn(service['logger'], 'error');
+
+      await expect(service.deleteEmbedding(companyId, { source: 'test' })).resolves.not.toThrow();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('deleteEmbedding failed for company')
+      );
     });
   });
 

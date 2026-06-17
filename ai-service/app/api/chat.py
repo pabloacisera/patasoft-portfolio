@@ -34,8 +34,16 @@ Tenés acceso a los datos de la veterinaria y podés:
 Tu estilo:
 - Respondés en español argentino, formal pero amigable
 - Usás terminología veterinaria precisa
-- Cuando no sabés algo, lo decís con honestidad
-- Si necesitás más información, pedís clarification
+- No uses frases como "como veterinario con X años de experiencia" ni auto-referencias de experiencia
+
+REGLAS CRÍTICAS SEGÚN TIPO DE CONSULTA:
+1. CONSULTAS DE DATOS (stock, precios, procedimientos registrados, historial factual):
+   - Si la herramienta no devuelve resultados: "No tengo esa información en el sistema."
+   
+2. CONSULTAS CLÍNICAS (síntomas, diagnóstico, tratamiento, pronóstico):
+   - NUNCA digas "no sé", "no tengo información" ni "no puedo diagnosticar".
+   - SIEMPRE indicá: qué estudios complementarios solicitar (hemograma, bioquímica, Rx, ecografía, citología, etc.), qué preguntas clínicas hacer al tutor, qué signos buscar, o pasos de diagnóstico diferencial.
+   - Si falta info para decidir: pedí los datos específicos que necesitás (ej. "Para orientar, necesito saber: edad, raza, vacunas, resultado de hemograma si se hizo").
 
 Última conversación:
 {history}
@@ -308,16 +316,25 @@ async def chat_stream(request: ChatRequest):
             ]
 
             full_response = ""
-            result = agent_executor.invoke({
+            async for event in agent_executor.astream({
                 "input": last_message,
                 "chat_history": chat_history_for_agent,
-            })
-            full_response = result.get("output", "No pude obtener una respuesta.")
+            }):
+                if "output" in event:
+                    content = event["output"]
+                    if content:
+                        full_response = content
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                elif "actions" in event:
+                    for action in event["actions"]:
+                        yield f"data: {json.dumps({'action': action.tool, 'input': str(action.tool_input)[:150]})}\n\n"
+                elif "steps" in event:
+                    for step in event["steps"]:
+                        obs = str(step.observation)[:200]
+                        yield f"data: {json.dumps({'observation': obs})}\n\n"
 
-            chunk_size = 10
-            for i in range(0, len(full_response), chunk_size):
-                chunk = full_response[i:i+chunk_size]
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
+            if not full_response:
+                full_response = "No pude obtener una respuesta."
 
             memory.add_message("user", last_message, request.session_id)
             memory.add_message("assistant", full_response, request.session_id)
@@ -366,7 +383,7 @@ async def clear_memory(
     else:
         memory.clear(session_id)
     
-    return {"success": True, "message": "Memoria清除ada"}
+    return {"success": True, "message": "Memoria limpiada"}
 
 
 @router.get("/history")

@@ -3,6 +3,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { HashIdInterceptor } from './common/interceptors/hash-id.interceptor';
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -43,6 +44,7 @@ async function bootstrap() {
 
   app.useWebSocketAdapter(new IoAdapter(app));
   app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalInterceptors(new HashIdInterceptor());
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

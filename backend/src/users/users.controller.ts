@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('users')
 @Controller('api/v1/users')
@@ -23,8 +24,7 @@ export class UsersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtener detalle de un usuario' })
-  findOne(@CurrentUser() user: any, @Param('id') id: string) {
-    // Si no es admin, solo puede verse a sí mismo (esto se podría refinar)
+  findOne(@CurrentUser() user: any, @Param('id', ParseHashIdPipe) id: number) {
     const companyId = user.role === 'SUPER_ADMIN' ? null : user.companyId;
     return this.usersService.findOne(id, companyId);
   }
@@ -33,7 +33,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Actualizar un usuario' })
   update(
     @CurrentUser() user: any,
-    @Param('id') id: string,
+    @Param('id', ParseHashIdPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
   ) {
     const companyId = user.role === 'SUPER_ADMIN' ? null : user.companyId;
@@ -43,7 +43,7 @@ export class UsersController {
   @Delete(':id')
   @Roles('ADMIN_COMPANY', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Desactivar un usuario' })
-  remove(@CurrentUser() user: any, @Param('id') id: string) {
+  remove(@CurrentUser() user: any, @Param('id', ParseHashIdPipe) id: number) {
     const companyId = user.role === 'SUPER_ADMIN' ? null : user.companyId;
     return this.usersService.deactivate(id, companyId);
   }

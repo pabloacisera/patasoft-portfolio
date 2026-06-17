@@ -20,7 +20,7 @@ export class MercadopagoService {
     private eventsGateway: EventsGateway,
   ) {}
 
-  async createPreference(companyId: string, dto: CreatePreferenceDto) {
+  async createPreference(companyId: number, dto: CreatePreferenceDto) {
     const configRec = await this.prisma.companyConfig.findUnique({ where: { companyId } });
     if (!configRec?.mpAccessToken) throw new BadRequestException('MercadoPago no configurado para esta empresa');
 
@@ -33,7 +33,7 @@ export class MercadopagoService {
     const preference = {
       items: [
         {
-          title: dto.title || `PagoVeterinaria #${payment.id.slice(-6)}`,
+          title: dto.title || `PagoVeterinaria #${String(payment.id).slice(-6)}`,
           description: dto.description || `Pago para servicios veterinarios`,
           quantity: dto.quantity || 1,
           unit_price: dto.unitPrice || payment.totalAmount,
@@ -79,7 +79,7 @@ export class MercadopagoService {
     };
   }
 
-  async createQrPayment(companyId: string, dto: QrPaymentDto) {
+  async createQrPayment(companyId: number, dto: QrPaymentDto) {
     const configRec = await this.prisma.companyConfig.findUnique({ where: { companyId } });
     if (!configRec?.mpAccessToken) throw new BadRequestException('MercadoPago no configurado para esta empresa');
     if (!configRec?.mpUserId) throw new BadRequestException('User ID de MercadoPago no encontrado. Reconectá tu cuenta.');
@@ -90,16 +90,16 @@ export class MercadopagoService {
     });
     if (!payment) throw new NotFoundException('Pago no encontrado');
 
-    const externalPosId = `pos_${companyId.slice(-8)}`;
+    const externalPosId = `pos_${String(companyId).slice(-8)}`;
     
     const qrPayload = {
       external_reference: payment.id,
-      title: dto.description || `Pago Veterinaria #${payment.id.slice(-6)}`,
+      title: dto.description || `Pago Veterinaria #${String(payment.id).slice(-6)}`,
       description: dto.description || `Servicios veterinarios`,
       notification_url: `${this.config.get('BACKEND_URL')}/api/v1/payments/webhook`,
       total_amount: dto.amount || payment.totalAmount,
       items: payment.items?.length ? payment.items.map(item => ({
-        sku_number: item.id.slice(-8),
+        sku_number: String(item.id).slice(-8),
         category: 'services',
         title: item.description,
         description: item.description,
@@ -168,10 +168,10 @@ export class MercadopagoService {
     };
   }
 
-  private async ensurePosExists(companyId: string, mpUserId: string, externalPosId: string, accessToken: string) {
+  private async ensurePosExists(companyId: number, mpUserId: string, externalPosId: string, accessToken: string) {
     const storePayload = {
       name: 'Sucursal Principal',
-      external_id: `store_${companyId.slice(-8)}`,
+      external_id: `store_${String(companyId).slice(-8)}`,
     };
     const storeRes = await fetch(`https://api.mercadopago.com/users/${mpUserId}/stores`, {
       method: 'POST',
@@ -223,10 +223,11 @@ export class MercadopagoService {
           paymentData = await response.json();
           externalRef = paymentData.external_reference;
           
-          if (externalRef) {
+            if (externalRef) {
+            const externalRefNum = Number(externalRef);
             // Buscar el pago en nuestra DB para obter companyId
             const payment = await this.prisma.payment.findUnique({
-              where: { id: externalRef },
+              where: { id: externalRefNum },
               include: { debt: true },
             });
 
@@ -252,7 +253,7 @@ export class MercadopagoService {
               const status = paymentData.status;
               if (status === 'approved') {
                 await this.prisma.payment.update({
-                  where: { id: externalRef },
+                  where: { id: externalRefNum },
                   data: { status: 'PAID', paidAmount: payment.totalAmount, paidAt: new Date(), mpPaymentId: id },
                 });
 
@@ -264,7 +265,7 @@ export class MercadopagoService {
                 }
                 // Registrar movimiento de caja
                 const existingMovement = await this.prisma.cashMovement.findFirst({
-                  where: { paymentId: externalRef }
+                  where: { paymentId: externalRefNum }
                 });
                 if (!existingMovement) {
                   await this.prisma.cashMovement.create({
@@ -273,30 +274,29 @@ export class MercadopagoService {
                       type: 'INCOME',
                       amount: payment.totalAmount,
                       reason: 'Pago recibido vía MercadoPago',
-                      paymentId: externalRef,
-                      date: new Date(),
+                      paymentId: externalRefNum,
                     },
                   });
                 }
 
                 // Generar comprobante PDF
-                this.pdfService.generateAndStoreReceipt(externalRef, companyId).catch(e =>
+                this.pdfService.generateAndStoreReceipt(externalRefNum, companyId).catch(e =>
                   this.logger.error('Error generando comprobante desde webhook MP', e)
                 );
 
                 // Notificar en tiempo real
                 this.eventsGateway.emitToCompany(companyId, 'payment:confirmed', {
-                  paymentId: externalRef,
+                  paymentId: externalRefNum,
                   status: 'PAID',
                 });
 
-                this.logger.log(`Pago ${externalRef} aprobado para empresa ${companyId}`);
+                this.logger.log(`Pago ${externalRefNum} aprobado para empresa ${companyId}`);
               } else if (status === 'pending') {
                 await this.prisma.payment.update({
-                  where: { id: externalRef },
+                  where: { id: externalRefNum },
                   data: { status: 'PENDING', mpPaymentId: id },
                 });
-                this.logger.log(`Pago ${externalRef} pendiente para empresa ${companyId}`);
+                this.logger.log(`Pago ${externalRefNum} pendiente para empresa ${companyId}`);
               }
             }
           }
@@ -307,7 +307,7 @@ export class MercadopagoService {
     return { received: true };
   }
 
-  async getPaymentStatus(mpPaymentId: string, companyId: string) {
+  async getPaymentStatus(mpPaymentId: string, companyId: number) {
     const configRec = await this.prisma.companyConfig.findUnique({ where: { companyId } });
     if (!configRec?.mpAccessToken) throw new BadRequestException('MercadoPago no configurado');
 
@@ -319,7 +319,7 @@ export class MercadopagoService {
     return response.json();
   }
 
-  async handleOAuthCallback(companyId: string, code: string) {
+  async handleOAuthCallback(companyId: number, code: string) {
     const MP_APP_ID = this.config.get('MP_APP_ID');
     const MP_CLIENT_SECRET = this.config.get('MP_CLIENT_SECRET');
 
@@ -363,7 +363,7 @@ export class MercadopagoService {
     return { success: true };
   }
 
-  async refreshOAuthToken(companyId: string) {
+  async refreshOAuthToken(companyId: number) {
     const config = await this.prisma.companyConfig.findUnique({ where: { companyId } });
     if (!config?.mpRefreshToken) throw new BadRequestException('No hay refresh token guardado');
     
@@ -395,7 +395,7 @@ export class MercadopagoService {
     return data.access_token;
   }
 
-  async disconnectOAuth(companyId: string) {
+  async disconnectOAuth(companyId: number) {
     await this.prisma.companyConfig.update({
       where: { companyId },
       data: {
@@ -409,7 +409,7 @@ export class MercadopagoService {
     return { success: true };
   }
 
-  async getOAuthStatus(companyId: string) {
+  async getOAuthStatus(companyId: number) {
     const config = await this.prisma.companyConfig.findUnique({ where: { companyId } });
     return {
       connected: !!(config?.mpAccessToken),

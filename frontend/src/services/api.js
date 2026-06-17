@@ -99,6 +99,74 @@ class ApiClient {
     return data;
   }
 
+  async requestRaw(endpoint, options = {}, retryCount = 0) {
+    const url = `${this.baseUrl}${endpoint}`;
+    const token = this.getToken();
+
+    const headers = {
+      ...options.headers,
+    };
+
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (response.status === 401 && retryCount < 1) {
+      const isAuthEndpoint = EXCLUDED_PATHS.some(path => endpoint.startsWith(path));
+
+      if (isAuthEndpoint) {
+        let authMessage = 'Unauthorized';
+        try {
+          const data = await response.clone().json();
+          authMessage = data.message || authMessage;
+        } catch {}
+        throw new Error(authMessage);
+      }
+
+      const refreshed = await this.refreshToken();
+
+      if (refreshed) {
+        return this.requestRaw(endpoint, options, retryCount + 1);
+      }
+
+      logout();
+      throw new Error('Unauthorized');
+    }
+
+    if (!response.ok) {
+      let message = 'Request failed';
+      let errorCode = null;
+      try {
+        const data = await response.json();
+        message = data.message || message;
+        errorCode = data.error || null;
+      } catch {}
+
+      if (response.status === 403 && (errorCode === 'ONBOARDING_REQUIRED' || message.includes('empresa'))) {
+        if (!window.location.pathname.startsWith('/onboarding')) {
+          console.warn('[API] Usuario sin empresa, redirigiendo a onboarding...');
+          const { router } = await import('../router.js');
+          router.navigate('/onboarding');
+        }
+        throw new Error('ONBOARDING_REQUIRED');
+      }
+
+      console.error('[API] Response error:', response.status, message);
+      throw new Error(message);
+    }
+
+    return response;
+  }
+
   async refreshToken() {
     if (this.isRefreshing) {
       return new Promise(resolve => {
@@ -145,9 +213,9 @@ class ApiClient {
     }
   }
 
-  get(endpoint, params = {}) {
+  get(endpoint, params = {}, options = {}) {
     const query = new URLSearchParams(params).toString();
-    return this.request(`${endpoint}${query ? `?${query}` : ''}`, { method: 'GET' });
+    return this.request(`${endpoint}${query ? `?${query}` : ''}`, { method: 'GET', ...options });
   }
 
   async getBlob(path) {
@@ -179,6 +247,11 @@ class ApiClient {
   post(endpoint, data = {}) {
     const body = data instanceof FormData ? data : JSON.stringify(data);
     return this.request(endpoint, { method: 'POST', body });
+  }
+
+  streamPost(endpoint, data = {}) {
+    const body = data instanceof FormData ? data : JSON.stringify(data);
+    return this.requestRaw(endpoint, { method: 'POST', body });
   }
 
   put(endpoint, data = {}) {

@@ -12,6 +12,14 @@ export class AiProxyService {
   private readonly aiApiKey: string | undefined;
   private localRagService: LocalRagService | null;
 
+  getScaleMode(): string {
+    return this.scaleMode;
+  }
+
+  getLocalRagService(): LocalRagService | null {
+    return this.localRagService;
+  }
+
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
@@ -35,13 +43,41 @@ export class AiProxyService {
     return headers;
   }
 
-  async chat(companyId: string, dto: ChatDto) {
+  private async buildChatPayload(companyId: number, dto: ChatDto) {
     const config = await this.prisma.companyConfig.findUnique({
       where: { companyId },
       include: { company: true },
     });
-    if (!config) throw new NotFoundException('Configuración de empresa no encontrada');
 
+    if (!config) {
+      throw new NotFoundException('Configuración de empresa no encontrada');
+    }
+
+    const messages: Array<{ role: string; content: string }> = [];
+    if (dto.history && Array.isArray(dto.history)) {
+      for (const h of dto.history) {
+        if (h.role && h.content) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
+    }
+    messages.push({ role: 'user', content: dto.message });
+
+    return {
+      payload: {
+        messages,
+        model: dto.model || config.defaultAIModel || 'llama-3.3-70b-versatile',
+        company_id: companyId,
+        company_name: config.company.name,
+        company_address: config.company.address || '',
+        specialties: config.company.animalSpecialties || [],
+        session_id: dto.sessionId || companyId,
+      },
+      config,
+    };
+  }
+
+  async chat(companyId: number, dto: ChatDto) {
     if (this.scaleMode !== 'PRO') {
       if (!this.localRagService) throw new InternalServerErrorException('Servicio de IA local no disponible');
       try {
@@ -52,23 +88,7 @@ export class AiProxyService {
       }
     }
 
-    const messages = [];
-    if (dto.history && Array.isArray(dto.history)) {
-      for (const h of dto.history) {
-        if (h.role && h.content) messages.push({ role: h.role, content: h.content });
-      }
-    }
-    messages.push({ role: 'user', content: dto.message });
-
-    const payload = {
-      messages,
-      model: dto.model || config.defaultAIModel || 'llama-3.3-70b-versatile',
-      company_id: companyId,
-      company_name: config.company.name,
-      company_address: config.company.address || '',
-      specialties: config.company.animalSpecialties || [],
-      session_id: dto.sessionId || companyId,
-    };
+    const { payload } = await this.buildChatPayload(companyId, dto);
 
     try {
       const response = await fetch(`${this.aiBaseUrl}/api/v1/chat`, {
@@ -84,6 +104,33 @@ export class AiProxyService {
       return await response.json();
     } catch (error) {
       this.logger.error(`AI Proxy connection error: ${error.message}`);
+      throw new InternalServerErrorException('No se pudo conectar con el servicio de IA');
+    }
+  }
+
+  async chatStream(companyId: number, dto: ChatDto) {
+    if (this.scaleMode !== 'PRO') {
+      throw new InternalServerErrorException('El streaming remoto solo aplica en modo PRO');
+    }
+
+    const { payload } = await this.buildChatPayload(companyId, dto);
+
+    try {
+      const response = await fetch(`${this.aiBaseUrl}/api/v1/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        this.logger.error(`AI Service Chat Stream Error: ${err}`);
+        throw new InternalServerErrorException('Error en el servicio de IA');
+      }
+
+      return response;
+    } catch (error) {
+      this.logger.error(`AI Proxy stream error: ${error.message}`);
       throw new InternalServerErrorException('No se pudo conectar con el servicio de IA');
     }
   }
@@ -116,17 +163,11 @@ export class AiProxyService {
       return await response.json();
     } catch (error) {
       this.logger.error(`AI Proxy models error: ${error.message}`);
-      return {
-        models: [
-          'gpt-4o',
-          'gemini-1.5-pro',
-          'llama-3.3-70b-versatile'
-        ]
-      };
+      throw new InternalServerErrorException('No se pudieron obtener los modelos de IA');
     }
   }
 
-  async uploadRag(companyId: string, file: Express.Multer.File) {
+  async uploadRag(companyId: number, file: Express.Multer.File) {
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) throw new InternalServerErrorException('El archivo supera el límite de 10MB');
 
@@ -160,7 +201,7 @@ export class AiProxyService {
     }
   }
 
-  async getRagStatus(companyId: string) {
+  async getRagStatus(companyId: number) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { id: true, name: true },
@@ -181,7 +222,7 @@ export class AiProxyService {
     }
   }
 
-  async sendToRag(companyId: string, documents: Array<{ content: string; metadata: Record<string, any> }>, progressCallback?: (data: any) => void) {
+  async sendToRag(companyId: number, documents: Array<{ content: string; metadata: Record<string, any> }>, progressCallback?: (data: any) => void) {
     try {
       if (this.scaleMode !== 'PRO') {
         if (this.localRagService) {

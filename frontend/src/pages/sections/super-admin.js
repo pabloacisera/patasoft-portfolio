@@ -7,13 +7,15 @@ export async function renderSuperAdminSubscriptions(pageData) {
   
   try {
     const subs = await api.get('/superadmin/subscriptions');
-    content.innerHTML = `
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', `
       <div class="page-header"><h2>Administracion de Suscripciones</h2></div>
       <table class="data-table">
         <thead><tr><th>Empresa</th><th>Estado</th><th>Plan</th><th>Vence</th></tr></thead>
         <tbody>${(subs || []).map(s => '<tr><td>' + (s.company?.name || s.companyId) + '</td><td>' + s.status + '</td><td>' + (s.plan || '-') + '</td><td>' + (s.trialEndsAt ? new Date(s.trialEndsAt).toLocaleDateString() : '-') + '</td></tr>').join('')}</tbody>
-      </table>`;
+      </table>`);
   } catch (e) {
-    content.innerHTML = '<div class="empty-state"><p>Error cargando datos: ' + e.message + '</p></div>';
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>Error cargando datos: ' + e.message + '</p></div>');
   }
 }

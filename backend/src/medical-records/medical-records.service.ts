@@ -4,11 +4,14 @@ import { LocalRagService } from '../ai-proxy/local-rag.service';
 import { PdfService } from '../documents/pdf.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { DocumentProcessorService } from '../queues/document-processor.service';
+import { SuppliesService } from '../supplies/supplies.service';
+import { PetsService } from '../pets/pets.service';
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from './dto/medical-record.dto';
 
 @Injectable()
 export class MedicalRecordsService {
   private readonly logger = new Logger(MedicalRecordsService.name);
+  private readonly MAX_PHOTOS_PER_CONSULTATION = 3;
 
   constructor(
     private prisma: PrismaService,
@@ -16,9 +19,11 @@ export class MedicalRecordsService {
     private rag: LocalRagService,
     private cashService: CashRegisterService,
     private documentProcessor: DocumentProcessorService,
+    private suppliesService: SuppliesService,
+    private petsService: PetsService,
   ) {}
 
-  async findAll(companyId: string, pagination: any = {}) {
+  async findAll(companyId: number, pagination: any = {}) {
     const page = Number(pagination.page) || 1;
     const limit = Number(pagination.limit) || 20;
     const { petId, search, startDate, endDate } = pagination;
@@ -70,7 +75,7 @@ export class MedicalRecordsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number, options?: { includePaymentRelations?: boolean }) {
     const pets = await this.prisma.pet.findMany({ where: { companyId }, select: { id: true } });
     const petIds = pets.map(p => p.id);
 
@@ -80,7 +85,9 @@ export class MedicalRecordsService {
         pet: { include: { client: true, photos: true } },
         procedures: { include: { priceItem: true } },
         prescriptions: { include: { supply: true } },
-        payment: true,
+        payment: options?.includePaymentRelations ? {
+          include: { items: true, debt: true }
+        } : true,
       },
     });
 
@@ -88,17 +95,56 @@ export class MedicalRecordsService {
     return record;
   }
 
-  async create(companyId: string, dto: CreateMedicalRecordDto) {
+  async create(companyId: number, dto: CreateMedicalRecordDto) {
     const pet = await this.prisma.pet.findFirst({
       where: { id: dto.petId, companyId },
       include: { client: true },
     });
     if (!pet) throw new NotFoundException('Mascota no encontrada');
 
+    // Validaciones: price-items y supplies deben estar configurados si se usan
+    if (dto.procedures?.length) {
+      const hasPriceItemRef = dto.procedures.some(p => p.priceItemId);
+      const hasSupplyRef = dto.procedures.some(p => p.supplyId);
+      
+      if (hasPriceItemRef) {
+        const priceItemsCount = await this.prisma.priceItem.count({ where: { companyId, isActive: true } });
+        if (priceItemsCount === 0) {
+          throw new BadRequestException('No hay lista de precios configurada. Debe crear items de precio antes de agregar procedimientos.');
+        }
+      }
+      
+      if (hasSupplyRef) {
+        const suppliesCount = await this.prisma.supply.count({ where: { companyId, isActive: true } });
+        if (suppliesCount === 0) {
+          throw new BadRequestException('No hay insumos configurados. Debe crear insumos antes de asociarlos a procedimientos.');
+        }
+      }
+    }
+
+    if (dto.prescriptions?.some(p => p.soldInClinic && p.supplyId)) {
+      const suppliesCount = await this.prisma.supply.count({ where: { companyId, isActive: true } });
+      if (suppliesCount === 0) {
+        throw new BadRequestException('No hay insumos configurados. Debe crear insumos antes de venderlos en clínica.');
+      }
+    }
+
+    if (dto.supplyItems?.length) {
+      const suppliesCount = await this.prisma.supply.count({ where: { companyId, isActive: true } });
+      if (suppliesCount === 0) {
+        throw new BadRequestException('No hay insumos configurados. Debe crear insumos antes de agregarlos sueltos.');
+      }
+    }
+
+    // Validar fotos (máximo 3)
+    if (dto.photos && dto.photos.length > this.MAX_PHOTOS_PER_CONSULTATION) {
+      throw new BadRequestException(`Máximo ${this.MAX_PHOTOS_PER_CONSULTATION} fotos por consulta`);
+    }
+
     // Calcular items del pago (si vienen del frontend, usar esos; sino calcular)
     let totalAmount = dto.totalAmount || 0;
     
-    const paymentItems = [];
+    const paymentItems: any[] = [];
     
     if (dto.totalAmount !== undefined && dto.totalAmount > 0) {
       totalAmount = dto.totalAmount;
@@ -172,6 +218,7 @@ export class MedicalRecordsService {
           temperature: dto.temperature,
           nextVisitDate: dto.nextVisitDate ? new Date(dto.nextVisitDate) : undefined,
           veterinarianId: dto.veterinarianId,
+          veterinarianName: dto.veterinarianName,
           date: dto.date ? new Date(dto.date) : undefined,
           procedures: dto.procedures?.length ? {
             create: dto.procedures.map(p => ({
@@ -186,7 +233,7 @@ export class MedicalRecordsService {
           prescriptions: dto.prescriptions?.length ? {
             create: dto.prescriptions.map(p => ({
               supplyId: p.supplyId || null,
-              medicineName: p.medicineName,
+              medicineName: p.medicineName || (p.supplyId ? 'Insumo clínico' : 'Indicación médica'),
               dose: p.dose,
               frequency: p.frequency,
               duration: p.duration,
@@ -205,33 +252,36 @@ export class MedicalRecordsService {
         },
       });
 
-      // 2. Descontar stock de supplies usados en procedures
+      // 2. Subir fotos de la consulta (máx 3)
+      if (dto.photos && dto.photos.length > 0) {
+        for (const photo of dto.photos.slice(0, this.MAX_PHOTOS_PER_CONSULTATION)) {
+          if (photo.url) {
+            await tx.petPhoto.create({
+              data: {
+                petId: dto.petId,
+                cloudinaryUrl: photo.url,
+                cloudinaryId: `consultation_${record.id}_${Date.now()}`,
+                isPrimary: false,
+              },
+            });
+          }
+        }
+      }
+
+      // 3. Descontar stock de supplies usados en procedures
       for (const proc of (dto.procedures || [])) {
         if (!proc.supplyId) continue;
-        const supply = await tx.supply.findUnique({ where: { id: proc.supplyId } });
-        if (!supply) continue;
-        const qty2 = proc.quantity || 1;
-        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty2 / supply.unitsPerStock) : qty2;
-        await tx.supply.update({
-          where: { id: proc.supplyId },
-          data: { quantity: { decrement: stockUnitsUsed } },
-        });
+        await this.suppliesService.deductStock(companyId, proc.supplyId, proc.quantity || 1, tx);
       }
 
-      // 3. Descontar stock de prescriptions vendidas en clínica
+      // 4. Descontar stock de prescriptions vendidas en clínica
       for (const pres of (dto.prescriptions || [])) {
         if (!pres.soldInClinic || !pres.supplyId) continue;
-        const supply = await tx.supply.findUnique({ where: { id: pres.supplyId } });
-        if (!supply) continue;
         const dispensingQty = pres.dispensingQuantity || pres.quantity || 1;
-        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(dispensingQty / supply.unitsPerStock) : dispensingQty;
-        await tx.supply.update({
-          where: { id: pres.supplyId },
-          data: { quantity: { decrement: stockUnitsUsed } },
-        });
+        await this.suppliesService.deductStock(companyId, pres.supplyId, dispensingQty, tx);
       }
 
-      // 4. Crear Payment
+      // 5. Crear Payment
       const paymentData: any = {
         companyId,
         clientId: pet.clientId || null,
@@ -260,12 +310,12 @@ export class MedicalRecordsService {
       return { record, payment };
     });
 
-    // 5. Movimiento de caja para pagos en efectivo
+    // 6. Movimiento de caja para pagos en efectivo
     if (dto.paymentMethod === 'CASH' && dto.paymentStatus === 'PAID') {
       await this.cashService.createFromPayment(companyId, result.payment.id, result.payment.totalAmount);
     }
 
-    // 6. Generar PDFs via cola (no bloquear la respuesta)
+    // 7. Generar PDFs via cola (no bloquear la respuesta)
     this.documentProcessor.enqueuePdfJob({ companyId, pdfType: 'prescription', recordId: result.record.id }).catch(e =>
       this.logger.error('Error encolando PDF receta', e)
     );
@@ -282,7 +332,7 @@ export class MedicalRecordsService {
     return result;
   }
 
-  async update(id: string, companyId: string, dto: UpdateMedicalRecordDto) {
+  async update(id: number, companyId: number, dto: UpdateMedicalRecordDto) {
     await this.findOne(id, companyId);
 
     const record = await this.prisma.medicalRecord.update({
@@ -308,7 +358,7 @@ export class MedicalRecordsService {
     return record;
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: number, companyId: number) {
     await this.findOne(id, companyId);
     this.rag.deleteEmbedding(companyId, { source: 'medicalrecord', recordId: id });
     await this.prisma.medicalRecord.update({
@@ -318,7 +368,7 @@ export class MedicalRecordsService {
     this.logger.log(`Historial eliminado (soft delete): ${id}`);
   }
 
-  async addProcedure(recordId: string, companyId: string, dto: any) {
+  async addProcedure(recordId: number, companyId: number, dto: any) {
     await this.findOne(recordId, companyId);
     
     const procedure = await this.prisma.procedure.create({
@@ -334,20 +384,13 @@ export class MedicalRecordsService {
     });
 
     if (dto.supplyId) {
-      const supply = await this.prisma.supply.findFirst({ where: { id: dto.supplyId, companyId } });
-      if (supply) {
-        const qty = dto.quantity || 1;
-        const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty / supply.unitsPerStock) : qty;
-        const newQty = Math.max(0, supply.quantity - stockUnitsUsed);
-        await this.prisma.supply.update({ where: { id: dto.supplyId }, data: { quantity: newQty } });
-        this.logger.log(`Stock descontado por procedure agregado: ${supply.name} -${stockUnitsUsed} (quedan ${newQty})`);
-      }
+      await this.suppliesService.deductStock(companyId, dto.supplyId, dto.quantity || 1);
     }
 
     return procedure;
   }
 
-  async addPrescription(recordId: string, companyId: string, dto: any) {
+  async addPrescription(recordId: number, companyId: number, dto: any) {
     await this.findOne(recordId, companyId);
     return this.prisma.prescription.create({
       data: {
@@ -367,7 +410,7 @@ export class MedicalRecordsService {
     });
   }
 
-  async findPrescriptionDocument(recordId: string, companyId: string) {
+  async findPrescriptionDocument(recordId: number, companyId: number) {
     return this.prisma.document.findFirst({
       where: {
         companyId,
@@ -381,7 +424,84 @@ export class MedicalRecordsService {
     });
   }
 
-  async generateAndStorePrescription(recordId: string, companyId: string) {
+  async generateAndStorePrescription(recordId: number, companyId: number) {
     return this.pdfService.generateAndStorePrescription(recordId, companyId);
+  }
+
+  async generateAndStoreReceipt(paymentId: number, companyId: number) {
+    return this.pdfService.generateAndStoreReceipt(paymentId, companyId);
+  }
+
+  async cancel(recordId: number, companyId: number) {
+    const record = await this.findOne(recordId, companyId, { includePaymentRelations: true }) as any;
+    
+    if (record.isDeleted) {
+      throw new BadRequestException('La consulta ya está cancelada');
+    }
+
+    if (record.payment?.status === 'PAID' && record.payment.method !== 'CASH') {
+      throw new BadRequestException('No se puede cancelar una consulta con pago electrónico confirmado. Contacte al administrador.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Restaurar stock de procedures
+      for (const proc of record.procedures) {
+        if (proc.supplyId) {
+          await this.suppliesService.restoreStock(companyId, proc.supplyId, proc.quantity || 1, tx);
+        }
+      }
+
+      // 2. Restaurar stock de prescriptions vendidas en clínica
+      for (const pres of record.prescriptions) {
+        if (pres.soldInClinic && pres.supplyId) {
+          const dispensingQty = pres.dispensingQuantity || pres.quantity || 1;
+          await this.suppliesService.restoreStock(companyId, pres.supplyId, dispensingQty, tx);
+        }
+      }
+
+      // 3. Restaurar stock de payment.items (supplyItems sueltos) - intentar buscar supply por descripción
+      if (record.payment?.items) {
+        for (const item of record.payment.items) {
+          const supply = await tx.supply.findFirst({
+            where: { companyId, name: item.description }
+          });
+          if (supply) {
+            await this.suppliesService.restoreStock(companyId, supply.id, item.quantity, tx);
+          }
+        }
+      }
+
+      // 4. Revertir movimiento de caja si era CASH + PAID
+      if (record.payment?.method === 'CASH' && record.payment?.status === 'PAID') {
+        await this.cashService.reverseFromPayment(companyId, record.payment.id, tx);
+      }
+
+      // 5. Marcar payment como CANCELLED
+      if (record.payment) {
+        await tx.payment.update({
+          where: { id: record.payment.id },
+          data: { status: 'CANCELLED', deletedAt: new Date(), isDeleted: true },
+        });
+      }
+
+      // 6. Soft delete debt si existe
+      if (record.payment?.debt) {
+        await tx.debt.update({
+          where: { id: record.payment.debt.id },
+          data: { status: 'CANCELLED', cancelledAt: new Date(), isDeleted: true },
+        });
+      }
+
+      // 7. Marcar medicalRecord como eliminado
+      const cancelledRecord = await tx.medicalRecord.update({
+        where: { id: recordId },
+        data: { isDeleted: true, deletedAt: new Date() },
+      });
+
+      this.rag.deleteEmbedding(companyId, { source: 'medicalrecord', recordId });
+      this.logger.log(`Consulta cancelada: ${recordId} - stock y caja restaurados`);
+
+      return { record: cancelledRecord, payment: record.payment };
+    });
   }
 }

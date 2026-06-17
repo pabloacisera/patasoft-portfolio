@@ -56,6 +56,6 @@ async validate(accessToken: string, refreshToken: string, profile: any, done: Ve
   }
 
   console.log('[GoogleStrategy] Usuario final:', user ? `id=${user.id}` : 'null');
-  done(null, user);
+  done(undefined, user || false);
 }
 }

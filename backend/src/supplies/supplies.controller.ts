@@ -5,6 +5,7 @@ import { Response } from 'express';
 import { SuppliesService } from './supplies.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('supplies')
 @ApiBearerAuth()
@@ -48,16 +49,16 @@ export class SuppliesController {
     return this.s.importFromExcel(u.companyId, file.buffer);
   }
 
-  @Get(':id') findOne(@Param('id') id: string, @CurrentUser() u: any) { return this.s.findOne(id, u.companyId); }
+  @Get(':id') findOne(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() u: any) { return this.s.findOne(id, u.companyId); }
   
   @Post() create(@Body() d: any, @CurrentUser() u: any) { return this.s.create(u.companyId, d); }
   
-  @Patch(':id') update(@Param('id') id: string, @Body() d: any, @CurrentUser() u: any) { return this.s.update(id, u.companyId, d); }
+  @Patch(':id') update(@Param('id', ParseHashIdPipe) id: number, @Body() d: any, @CurrentUser() u: any) { return this.s.update(id, u.companyId, d); }
   
-  @Delete(':id') remove(@Param('id') id: string, @CurrentUser() u: any) { return this.s.remove(id, u.companyId); }
+  @Delete(':id') remove(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() u: any) { return this.s.remove(id, u.companyId); }
 
   @Post(':id/decrease')
-  decreaseStock(@Param('id') id: string, @Body('quantity') qty: number, @CurrentUser() u: any) {
+  decreaseStock(@Param('id', ParseHashIdPipe) id: number, @Body('quantity') qty: number, @CurrentUser() u: any) {
     return this.s.decreaseStock(id, u.companyId, qty);
   }
 }

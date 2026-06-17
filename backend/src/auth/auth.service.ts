@@ -113,7 +113,7 @@ export class AuthService {
     }
   }
 
-  async validateUser(userId: string) {
+  async validateUser(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { company: true },
@@ -126,7 +126,7 @@ export class AuthService {
     return user;
   }
 
-  async getMe(userId: string) {
+  async getMe(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -176,7 +176,7 @@ export class AuthService {
     return tokens;
   }
 
-  private async generateTokens(userId: string, email: string, companyId?: string | null) {
+  private async generateTokens(userId: number, email: string, companyId?: number | null) {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
         { sub: userId, email, companyId: companyId || null },

@@ -42,13 +42,21 @@ services:
         value: production
       - key: PORT
         value: 3000
+      # DATABASE_URL y REDIS_URL: sync:false para usar Supabase + Upstash externos
+      # Configurar manualmente en Render Dashboard con URLs reales de Supabase/Upstash
       - key: DATABASE_URL
-        fromDatabase:
-          name: patasoft-db
-          property: connectionString
+        sync: false
+      - key: DIRECT_URL
+        sync: false
       - key: REDIS_URL
-        fromKvStore:
-          name: patasoft-kv
+        sync: false
+      # Supabase credenciales (configurar en Render Dashboard)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       # JWT (generar con: openssl rand -base64 64)
       - key: JWT_SECRET
         generateValue: true
@@ -60,7 +68,8 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_CALLBACK_URL
-        value: https://patasoft-api.onrender.com/auth/google/callback
+        sync: false
+        # En producción real (Cloudflare Tunnel): https://api-patasoft.artisandevs.site/api/v1/auth/google/callback
       # Cloudinary
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
@@ -100,13 +109,19 @@ services:
     buildCommand: cd ai-service && pip install -r requirements.txt
     startCommand: cd ai-service && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    disk:
+      name: chroma-data
+      mountPath: /opt/chroma_db
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      # DATABASE_URL y REDIS_URL: sync:false para usar Supabase + Upstash externos
+      # Configurar manualmente en Render Dashboard con URLs reales de Supabase/Upstash
       - key: DATABASE_URL
-        fromDatabase:
-          name: patasoft-db
-          property: connectionString
+        sync: false
+      - key: REDIS_URL
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: GEMINI_API_KEY
@@ -115,23 +130,6 @@ services:
         sync: false
       - key: AI_SERVICE_API_KEY
         sync: false
+      - key: CHROMA_PERSIST_DIR
+        value: /opt/chroma_db
     autoDeploy: true
-
-# ============================================
-# BASE DE DATOS
-# ============================================
-
-databases:
-  - name: patasoft-db
-    plan: free
-    databaseName: patasoft_db
-    ipAllowList: []
-
-# ============================================
-# KEY-VALUE STORE (Redis)
-# ============================================
-
-renderKvStores:
-  - name: patasoft-kv
-    plan: free
-    ipAllowList: []

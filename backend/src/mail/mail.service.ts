@@ -12,8 +12,8 @@ export class MailService {
     private config: ConfigService,
     private prisma: PrismaService,
   ) {
-    this.apiKey = this.config.get('MJ_APIKEY');
-    this.apiSecret = this.config.get('MJ_APISECRET');
+    this.apiKey = this.config.get<string>('MJ_APIKEY') || '';
+    this.apiSecret = this.config.get<string>('MJ_APISECRET') || '';
   }
 
   private getClient() {

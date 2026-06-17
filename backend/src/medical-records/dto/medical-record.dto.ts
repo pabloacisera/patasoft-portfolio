@@ -1,6 +1,24 @@
-import { IsString, IsOptional, IsNumber, IsUUID, IsDateString, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, IsDateString, IsArray, ValidateNested, IsEnum, IsBoolean, IsUrl, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
+class PetPhotoDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  url?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  base64?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+}
 
 class ProcedureDto {
   @IsString()
@@ -13,13 +31,13 @@ class ProcedureDto {
   
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  priceItemId?: string;
+  @IsInt()
+  priceItemId?: number;
   
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  supplyId?: string;
+  @IsInt()
+  supplyId?: number;
   
   @ApiPropertyOptional()
   @IsOptional()
@@ -35,11 +53,13 @@ class ProcedureDto {
 class PrescriptionDto {
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  supplyId?: string;
+  @IsInt()
+  supplyId?: number;
   
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  medicineName: string;
+  medicineName?: string;
   
   @ApiPropertyOptional()
   @IsOptional()
@@ -83,7 +103,7 @@ class PrescriptionDto {
   
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsBoolean()
   soldInClinic?: boolean;
 }
 
@@ -102,13 +122,13 @@ class SupplyItemDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  supplyId?: string;
+  @IsInt()
+  supplyId?: number;
 }
 
 export class CreateMedicalRecordDto {
-  @IsUUID()
-  petId: string;
+  @IsInt()
+  petId: number;
 
   @IsString()
   visitReason: string;
@@ -145,13 +165,25 @@ export class CreateMedicalRecordDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  veterinarianId?: string;
+  @IsInt()
+  veterinarianId?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
   date?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  veterinarianName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PetPhotoDto)
+  photos?: PetPhotoDto[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -238,6 +270,6 @@ export class UpdateMedicalRecordDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  veterinarianId?: string;
+  @IsInt()
+  veterinarianId?: number;
 }

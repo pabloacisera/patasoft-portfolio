@@ -6,6 +6,8 @@ import { PdfService } from '../documents/pdf.service';
 import { AiProxyModule } from '../ai-proxy/ai-proxy.module';
 import { CashRegisterModule } from '../cash-register/cash-register.module';
 import { QueuesModule } from '../queues/queues.module';
+import { SuppliesModule } from '../supplies/supplies.module';
+import { PetsModule } from '../pets/pets.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { QueuesModule } from '../queues/queues.module';
     AiProxyModule,
     CashRegisterModule,
     QueuesModule,
+    SuppliesModule,
+    PetsModule,
   ],
   controllers: [MedicalRecordsController],
   providers: [MedicalRecordsService, PdfService],

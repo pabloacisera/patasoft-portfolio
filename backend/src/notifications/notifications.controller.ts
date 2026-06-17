@@ -4,6 +4,7 @@ import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto, UpdateNotificationDto, QueryNotificationDto } from './dto/notification.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('notifications')
 @ApiBearerAuth()
@@ -22,7 +23,7 @@ export class NotificationsController {
     return { count: count.meta.total };
   }
 
-  @Get(':id') findOne(@Param('id') id: string, @CurrentUser() user: any) {
+  @Get(':id') findOne(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.notificationsService.findOne(id, user.companyId);
   }
 
@@ -30,7 +31,7 @@ export class NotificationsController {
     return this.notificationsService.create(user.companyId, dto);
   }
 
-  @Patch(':id/read') markAsRead(@Param('id') id: string, @CurrentUser() user: any) {
+  @Patch(':id/read') markAsRead(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.notificationsService.markAsRead(id, user.companyId);
   }
 
@@ -38,7 +39,7 @@ export class NotificationsController {
     return this.notificationsService.markAllAsRead(user.companyId, user.id);
   }
 
-  @Delete(':id') remove(@Param('id') id: string, @CurrentUser() user: any) {
+  @Delete(':id') remove(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.notificationsService.remove(id, user.companyId);
   }
 }

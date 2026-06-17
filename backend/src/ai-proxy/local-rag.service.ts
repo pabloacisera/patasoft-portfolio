@@ -43,10 +43,10 @@ export class LocalRagService implements OnModuleInit, OnModuleDestroy {
       contents: text,
       config: { outputDimensionality: 768 },
     });
-    return Array.from(res.embeddings[0].values);
+    return Array.from(res.embeddings?.[0]?.values ?? []);
   }
 
-  async addDocuments(companyId: string, documents: any[], progressCallback?: ProgressCallback) {
+  async addDocuments(companyId: number, documents: any[], progressCallback?: ProgressCallback) {
     if (!this.isInitialized) {
       progressCallback?.({ type: 'error', current: 0, total: documents.length, message: 'RAG no inicializado' });
       return { added: 0, status: 'skipped' };
@@ -136,67 +136,73 @@ export class LocalRagService implements OnModuleInit, OnModuleDestroy {
     return { added: totalAdded, failed: totalFailed, verified, status: totalFailed > 0 ? 'partial' : 'success' };
   }
 
-  async upsertEmbedding(companyId: string, content: string, metadata: Record<string, any>) {
+  async upsertEmbedding(companyId: number, content: string, metadata: Record<string, any>) {
     if (!this.isInitialized) return;
-
-    const embedding = await this.embed(content);
-    const meta = { ...metadata, companyId };
-
-    const conditions: string[] = ['company_id = $1'];
-    const params: any[] = [companyId];
-    let idx = 2;
-
-    const idKeys = ['clientId', 'petId', 'supplyId', 'priceId', 'recordId', 'id'];
-    for (const key of idKeys) {
-      if (metadata[key]) {
-        conditions.push(`metadata->>'${key}' = $${idx}`);
-        params.push(String(metadata[key]));
-        idx++;
-      }
-    }
-
-    const c = await this.pool.connect();
     try {
-      await c.query(`DELETE FROM langchain_vectors WHERE ${conditions.join(' AND ')}`, params);
-      await c.query(
-        `INSERT INTO langchain_vectors (content, metadata, embedding, company_id)
-         VALUES ($1, $2, $3::vector, $4)`,
-        [content, JSON.stringify(meta), '[' + embedding.join(',') + ']', companyId]
-      );
-    } finally {
-      c.release();
-    }
+      const embedding = await this.embed(content);
+      const meta = { ...metadata, companyId };
 
-    this.logger.log(`Embedding upserted for company ${companyId} (source: ${metadata.source})`);
+      const conditions: string[] = ['company_id = $1'];
+      const params: any[] = [companyId];
+      let idx = 2;
+
+      const idKeys = ['clientId', 'petId', 'supplyId', 'priceId', 'recordId', 'id'];
+      for (const key of idKeys) {
+        if (metadata[key]) {
+          conditions.push(`metadata->>'${key}' = $${idx}`);
+          params.push(String(metadata[key]));
+          idx++;
+        }
+      }
+
+      const c = await this.pool.connect();
+      try {
+        await c.query(`DELETE FROM langchain_vectors WHERE ${conditions.join(' AND ')}`, params);
+        await c.query(
+          `INSERT INTO langchain_vectors (content, metadata, embedding, company_id)
+           VALUES ($1, $2, $3::vector, $4)`,
+          [content, JSON.stringify(meta), '[' + embedding.join(',') + ']', companyId]
+        );
+      } finally {
+        c.release();
+      }
+
+      this.logger.log(`Embedding upserted for company ${companyId} (source: ${metadata.source})`);
+    } catch (error) {
+      this.logger.error(`upsertEmbedding failed for company ${companyId} (source: ${metadata.source}): ${error.message}`);
+    }
   }
 
-  async deleteEmbedding(companyId: string, metadata: Record<string, any>) {
+  async deleteEmbedding(companyId: number, metadata: Record<string, any>) {
     if (!this.isInitialized) return;
-
-    const conditions: string[] = ['company_id = $1'];
-    const params: any[] = [companyId];
-    let idx = 2;
-
-    const idKeys = ['clientId', 'petId', 'supplyId', 'priceId', 'recordId', 'id'];
-    for (const key of idKeys) {
-      if (metadata[key]) {
-        conditions.push(`metadata->>'${key}' = $${idx}`);
-        params.push(String(metadata[key]));
-        idx++;
-      }
-    }
-
-    const c = await this.pool.connect();
     try {
-      await c.query(`DELETE FROM langchain_vectors WHERE ${conditions.join(' AND ')}`, params);
-    } finally {
-      c.release();
-    }
+      const conditions: string[] = ['company_id = $1'];
+      const params: any[] = [companyId];
+      let idx = 2;
 
-    this.logger.log(`Embedding deleted for company ${companyId} (source: ${metadata.source})`);
+      const idKeys = ['clientId', 'petId', 'supplyId', 'priceId', 'recordId', 'id'];
+      for (const key of idKeys) {
+        if (metadata[key]) {
+          conditions.push(`metadata->>'${key}' = $${idx}`);
+          params.push(String(metadata[key]));
+          idx++;
+        }
+      }
+
+      const c = await this.pool.connect();
+      try {
+        await c.query(`DELETE FROM langchain_vectors WHERE ${conditions.join(' AND ')}`, params);
+      } finally {
+        c.release();
+      }
+
+      this.logger.log(`Embedding deleted for company ${companyId} (source: ${metadata.source})`);
+    } catch (error) {
+      this.logger.error(`deleteEmbedding failed for company ${companyId} (source: ${metadata.source}): ${error.message}`);
+    }
   }
 
-  private async similaritySearch(companyId: string, query: string, k = 15): Promise<string[]> {
+  private async similaritySearch(companyId: number, query: string, k = 15): Promise<string[]> {
     const embedding = await this.embed(query);
     const vectorStr = '[' + embedding.join(',') + ']';
     const client = await this.pool.connect();
@@ -214,7 +220,7 @@ export class LocalRagService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async query(companyId: string, message: string, history: any[] = []) {
+  async query(companyId: number, message: string, history: any[] = []) {
     const model = this.config.get('GROQ_MODEL_DEFAULT') || 'llama-3.3-70b-versatile';
     let context = '';
 
@@ -231,8 +237,8 @@ export class LocalRagService implements OnModuleInit, OnModuleDestroy {
     }
 
     const systemPrompt = context
-      ? `SOS UN ASISTENTE VETERINARIO. Tu trabajo es responder preguntas sobre los datos de la veterinaria que administrás.\n\nDATOS DE LA VETERINARIA:\n${context}\n\nINSTRUCCIONES:\n- Leé TODOS los datos proporcionados arriba antes de responder.\n- Si la pregunta es sobre inventory/stock/cantidad/precio de algo, buscá esa información específica en los datos.\n- Nombrá exactamente qué productos/cantidades encontraste en los datos.\n- Si no hay información en los datos, decilo claramente: "No tengo esa información en los datos de la veterinaria."\n- NO inventes información que no esté en los datos.\n- Respondé en español argentino, de forma clara y directa.`
-      : `Sos un asistente veterinario especializado. Respondé preguntas sobre medicina veterinaria, animales y cuidado de mascotas en español argentino.`;
+      ? `SOS UN ASISTENTE VETERINARIO. Tu trabajo es responder preguntas sobre los datos de la veterinaria que administrás.\n\nDATOS DE LA VETERINARIA:\n${context}\n\nINSTRUCCIONES:\n- Leé TODOS los datos proporcionados arriba antes de responder.\n- Si la pregunta es sobre inventory/stock/cantidad/precio de algo, buscá esa información específica en los datos.\n- Nombrá exactamente qué productos/cantidades encontraste en los datos.\n- Si no hay información en los datos sobre stock/precios/procedimientos registrados, decilo claramente: "No tengo esa información en los datos de la veterinaria."\n- NO inventes información que no esté en los datos.\n- Respondé en español argentino, de forma clara y directa.\n- IMPORTANTE: Si la consulta es CLÍNICA (síntomas, diagnóstico, tratamiento, pronóstico): NUNCA digas "no sé" ni "no tengo información". En su lugar, indicá qué estudios complementarios solicitar (hemograma, bioquímica, Rx, ecografía, etc.), qué preguntas hacer al tutor, o qué pasos de diagnóstico diferencial seguir.`
+      : `Sos un asistente veterinario especializado. Respondé preguntas sobre medicina veterinaria, animales y cuidado de mascotas en español argentino.\n\nIMPORTANTE: Si la consulta es CLÍNICA (síntomas, diagnóstico, tratamiento, pronóstico): NUNCA digas "no sé" ni "no tengo información". En su lugar, indicá qué estudios complementarios solicitar (hemograma, bioquímica, Rx, ecografía, etc.), qué preguntas hacer al tutor, o qué pasos de diagnóstico diferencial seguir. No uses frases como "como veterinario con X años de experiencia".`;
 
     const messages: any[] = [{ role: 'system', content: systemPrompt }];
     if (Array.isArray(history)) {
@@ -247,7 +253,7 @@ export class LocalRagService implements OnModuleInit, OnModuleDestroy {
     return { message: { role: 'assistant', content: answer }, response: answer, hasContext: !!context };
   }
 
-  async *queryStream(companyId: string, message: string, history: any[] = []) {
+  async *queryStream(companyId: number, message: string, history: any[] = []) {
     const model = this.config.get('GROQ_MODEL_DEFAULT') || 'llama-3.3-70b-versatile';
     let context = '';
 
@@ -264,8 +270,8 @@ export class LocalRagService implements OnModuleInit, OnModuleDestroy {
     }
 
     const systemPrompt = context
-      ? `SOS UN ASISTENTE VETERINARIO. Tu trabajo es responder preguntas sobre los datos de la veterinaria que administrás.\n\nDATOS DE LA VETERINARIA:\n${context}\n\nINSTRUCCIONES:\n- Leé TODOS los datos proporcionados arriba antes de responder.\n- Si la pregunta es sobre inventory/stock/cantidad/precio de algo, buscá esa información específica en los datos.\n- Nombrá exactamente qué productos/cantidades encontraste en los datos.\n- Si no hay información en los datos, decilo claramente: "No tengo esa información en los datos de la veterinaria."\n- NO inventes información que no esté en los datos.\n- Respondé en español argentino, de forma clara y directa.`
-      : `Sos un asistente veterinario especializado. Respondé preguntas sobre medicina veterinaria, animales y cuidado de mascotas en español argentino.`;
+      ? `SOS UN ASISTENTE VETERINARIO. Tu trabajo es responder preguntas sobre los datos de la veterinaria que administrás.\n\nDATOS DE LA VETERINARIA:\n${context}\n\nINSTRUCCIONES:\n- Leé TODOS los datos proporcionados arriba antes de responder.\n- Si la pregunta es sobre inventory/stock/cantidad/precio de algo, buscá esa información específica en los datos.\n- Nombrá exactamente qué productos/cantidades encontraste en los datos.\n- Si no hay información en los datos sobre stock/precios/procedimientos registrados, decilo claramente: "No tengo esa información en los datos de la veterinaria."\n- NO inventes información que no esté en los datos.\n- Respondé en español argentino, de forma clara y directa.\n- IMPORTANTE: Si la consulta es CLÍNICA (síntomas, diagnóstico, tratamiento, pronóstico): NUNCA digas "no sé" ni "no tengo información". En su lugar, indicá qué estudios complementarios solicitar (hemograma, bioquímica, Rx, ecografía, etc.), qué preguntas hacer al tutor, o qué pasos de diagnóstico diferencial seguir.`
+      : `Sos un asistente veterinario especializado. Respondé preguntas sobre medicina veterinaria, animales y cuidado de mascotas en español argentino.\n\nIMPORTANTE: Si la consulta es CLÍNICA (síntomas, diagnóstico, tratamiento, pronóstico): NUNCA digas "no sé" ni "no tengo información". En su lugar, indicá qué estudios complementarios solicitar (hemograma, bioquímica, Rx, ecografía, etc.), qué preguntas hacer al tutor, o qué pasos de diagnóstico diferencial seguir. No uses frases como "como veterinario con X años de experiencia".`;
 
     const messages: any[] = [{ role: 'system', content: systemPrompt }];
     if (Array.isArray(history)) {

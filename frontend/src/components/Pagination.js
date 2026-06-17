@@ -48,7 +48,8 @@ export function renderPagination(options) {
 
   const container = document.createElement('div');
   container.className = 'pagination';
-  container.innerHTML = `
+  container.replaceChildren();
+  container.insertAdjacentHTML('beforeend', `
     <button class="pagination-btn pagination-prev" data-page="prev" ${prevDisabled}>
       &lt; Anterior
     </button>
@@ -59,7 +60,7 @@ export function renderPagination(options) {
       Siguiente &gt;
     </button>
     ${infoHTML}
-  `;
+  `);
 
   container.querySelectorAll('[data-page]').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -91,7 +92,7 @@ export function createPagination(options) {
         ...options,
         page: newPage,
       });
-      container.innerHTML = '';
+      container.replaceChildren();
       container.appendChild(newPagination);
     }
   });
@@ -104,7 +105,7 @@ export function updatePagination(container, options) {
   if (!container) return;
   
   const pagination = renderPagination(options);
-  container.innerHTML = '';
+  container.replaceChildren();
   container.appendChild(pagination);
 }
 

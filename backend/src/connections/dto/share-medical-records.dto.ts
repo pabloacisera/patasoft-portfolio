@@ -1,7 +1,8 @@
-import { IsString, IsArray, IsOptional } from 'class-validator';
+import { IsNumber, IsArray, IsOptional, IsString } from 'class-validator';
 
 export class ShareMedicalRecordsDto {
-  @IsString() targetCompanyId: string;
-  @IsArray() medicalRecordIds: string[];
+  @IsNumber() targetCompanyId: number;
+  @IsNumber({}, { each: true }) @IsArray()
+  medicalRecordIds: number[];
   @IsOptional() @IsString() notes?: string;
 }

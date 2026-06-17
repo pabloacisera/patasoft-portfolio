@@ -1,7 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsNumber } from 'class-validator';
 
 export class CreateConnectionDto {
-  @IsString() companyBId: string;
+  @IsNumber() companyBId: number;
 }
 
 export class UpdateConnectionDto {

@@ -643,7 +643,7 @@ CREATE TABLE langchain_vectors (
   content TEXT NOT NULL,
   metadata JSONB NOT NULL DEFAULT '{}',
   embedding vector(768),
-  company_id UUID NOT NULL,
+  company_id INTEGER NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -742,7 +742,7 @@ Este es el sistema que corre **dentro del proceso NestJS**, sin servicios extern
 3. ALMACENAMIENTO VECTORIAL
    Tabla: langchain_vectors (PostgreSQL + pgvector)
    Columnas: content (TEXT), metadata (JSONB),
-             embedding (VECTOR(768)), company_id (UUID)
+              embedding (VECTOR(768)), company_id (INTEGER)
    Índice: IVFFLAT con cosine distance
 
 4. CONSULTA (cuando el usuario pregunta algo)
@@ -1544,7 +1544,7 @@ Archivo `backend/.env`:
 
 ```env
 # Base de datos
-DATABASE_URL=postgresql://patasoft:patasoft_dev@localhost:5432/patasoft_db
+DATABASE_URL=postgresql://user:password@localhost:5432/db
 
 # Redis
 REDIS_URL=redis://localhost:6379
@@ -1707,6 +1707,15 @@ El ai-service tiene:
 |---------|-----------|
 | **Idioma** | Código en inglés (variables, funciones), UI en español argentino |
 | **Nombres backend** | `camelCase` para métodos/variables, `PascalCase` para clases/DTOs |
+
+## Estándares de Arquitectura y Calidad
+
+### Manejo de DTOs
+- **Entrada:** Todo método de controlador debe usar un DTO validado con `class-validator`.
+- **Salida:** Los controladores principales deben usar decoradores `@ApiResponse({ type: XxxResponseDto })` para mantener el contrato Swagger actualizado. (Ver `common/dto/response.dto.ts`).
+
+### Dependencias entre Módulos
+Se prohíbe la creación de nuevas dependencias circulares. El uso de `forwardRef` está depreciado y solo se mantiene por compatibilidad con la v1.0. Para nuevas integraciones entre módulos, utilice el patrón de **Eventos**.
 | **Nombres frontend** | `camelCase` para funciones, `kebab-case` para archivos |
 | **Rutas API** | Plural: `/api/v1/clients`, `/api/v1/medical-records` |
 | **Soft-delete** | Siempre filtrar `isDeleted: false` en todas las queries |

@@ -4,7 +4,7 @@ graph TB
             PRISMA[Tablas gestionadas por Prisma]
         end
         subgraph "Raw SQL pg Pool"
-            PGVEC[langchain_vectors<br/>id: uuid<br/>content: text<br/>metadata: jsonb<br/>embedding: vector 768<br/>company_id: uuid]
+            PGVEC[langchain_vectors<br/>id: uuid<br/>content: text<br/>metadata: jsonb<br/>embedding: vector 768<br/>company_id: integer]
         end
     end
 

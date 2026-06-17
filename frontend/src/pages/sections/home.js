@@ -1,5 +1,6 @@
 import { api } from '../../services/api.js';
 import { formatCurrency, formatDate } from '../../utils/formatters.js';
+import { escapeHtml } from '../../utils/escape.js';
 
 export async function loadHomeData(pageData) {
   try {
@@ -33,7 +34,8 @@ export async function renderHomePage(content, pageData) {
   const subText = isTrial ? '⏳ Prueba gratuita' : isExpired ? '🔒 Vencida' : '✅ Activa';
   const subLink = isExpired || isTrial;
   
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     ${sub ? `
     <div class="subscription-card" style="background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-4); margin-bottom: var(--space-6); display: flex; align-items: center; justify-content: space-between;">
       <div>
@@ -48,20 +50,20 @@ export async function renderHomePage(content, pageData) {
     </div>
     ` : ''}
     <div class="stats-grid">
-      <div class="stat-card" onclick="window.location.href='/dashboard/clients'" style="cursor:pointer">
-        <div class="stat-card-value">${clientsCount}</div>
+      <div class="stat-card">
+        <div class="stat-card-value">${escapeHtml(clientsCount)}</div>
         <div class="stat-card-label">Clientes</div>
       </div>
-      <div class="stat-card" onclick="window.location.href='/dashboard/pets'" style="cursor:pointer">
-        <div class="stat-card-value">${petsCount}</div>
+      <div class="stat-card">
+        <div class="stat-card-value">${escapeHtml(petsCount)}</div>
         <div class="stat-card-label">Mascotas</div>
       </div>
-      <div class="stat-card" onclick="window.location.href='/dashboard/payments'" style="cursor:pointer">
+      <div class="stat-card">
         <div class="stat-card-value">${formatCurrency(totalDebt)}</div>
         <div class="stat-card-label">Deuda Total</div>
       </div>
-      <div class="stat-card" onclick="window.location.href='/dashboard/supplies'" style="cursor:pointer">
-        <div class="stat-card-value">${lowStockCount}</div>
+      <div class="stat-card">
+        <div class="stat-card-value">${escapeHtml(lowStockCount)}</div>
         <div class="stat-card-label">Insumos Bajos</div>
       </div>
     </div>
@@ -72,30 +74,33 @@ export async function renderHomePage(content, pageData) {
         <p>Cargando...</p>
       </div>
     </div>
-  `;
+  `);
   
   try {
     const { data: records } = await api.get('/medical-records?page=1&limit=5');
     const recordsEl = document.getElementById('recent-records');
     
     if (records?.length) {
-      recordsEl.innerHTML = `
+      recordsEl.replaceChildren();
+      recordsEl.insertAdjacentHTML('beforeend', `
         <table class="data-table">
           <thead><tr><th>Fecha</th><th>Mascota</th><th>Motivo</th><th>Diagnóstico</th></tr></thead>
           <tbody>${records.map(r => `
             <tr>
               <td>${formatDate(r.date)}</td>
-              <td>${r.pet?.name || '-'}</td>
-              <td>${r.visitReason}</td>
-              <td>${r.diagnosis || '-'}</td>
+              <td>${escapeHtml(r.pet?.name || '-')}</td>
+              <td>${escapeHtml(r.visitReason)}</td>
+              <td>${escapeHtml(r.diagnosis || '-')}</td>
             </tr>
           `).join('')}</tbody>
         </table>
-      `;
+      `);
     } else {
-      recordsEl.innerHTML = '<p class="empty-state">No hay consultas recientes</p>';
+      recordsEl.replaceChildren();
+      recordsEl.insertAdjacentHTML('beforeend', '<p class="empty-state">No hay consultas recientes</p>');
     }
   } catch (e) {
-    document.getElementById('recent-records').innerHTML = '<p class="empty-state">Error cargando datos</p>';
+    document.getElementById('recent-records').replaceChildren();
+    document.getElementById('recent-records').insertAdjacentHTML('beforeend', '<p class="empty-state">Error cargando datos</p>');
   }
 }

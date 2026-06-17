@@ -25,7 +25,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(EventsGateway.name);
-  private userSockets: Map<string, string[]> = new Map();
+  private userSockets: Map<number, string[]> = new Map();
 
   constructor(
     private config: ConfigService,
@@ -89,7 +89,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     return { event: 'left', room: payload.room };
   }
 
-  private async validateToken(token: string): Promise<{ userId: string; companyId: string } | null> {
+  private async validateToken(token: string): Promise<{ userId: number; companyId: number } | null> {
     try {
       const jwtService = new JwtService({
         secret: this.config.get('JWT_SECRET'),
@@ -101,11 +101,11 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     }
   }
 
-  emitToCompany(companyId: string, event: string, data: any) {
+  emitToCompany(companyId: number, event: string, data: any) {
     this.server.to(`company:${companyId}`).emit(event, data);
   }
 
-  emitToUser(userId: string, event: string, data: any) {
+  emitToUser(userId: number, event: string, data: any) {
     this.server.to(`user:${userId}`).emit(event, data);
   }
 

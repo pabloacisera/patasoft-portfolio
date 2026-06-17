@@ -5,7 +5,8 @@ import { router } from '../router.js';
 export function renderLogin() {
   const app = document.getElementById('app');
   
-  app.innerHTML = renderAuthLayout(`
+  app.replaceChildren();
+  app.insertAdjacentHTML('beforeend', renderAuthLayout(`
     <div class="auth-page">
       <div class="auth-side">
         <div class="auth-card">
@@ -48,7 +49,7 @@ export function renderLogin() {
         </div>
       </div>
     </div>
-  `);
+  `));
   
   document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -81,7 +82,8 @@ export function renderLogin() {
 export function renderRegister() {
   const app = document.getElementById('app');
   
-  app.innerHTML = renderAuthLayout(`
+  app.replaceChildren();
+  app.insertAdjacentHTML('beforeend', renderAuthLayout(`
     <div class="auth-page">
       <div class="auth-side">
         <div class="auth-card">
@@ -123,7 +125,7 @@ export function renderRegister() {
         </div>
       </div>
     </div>
-  `);
+  `));
   
   document.getElementById('register-form').addEventListener('submit', async (e) => {
     e.preventDefault();

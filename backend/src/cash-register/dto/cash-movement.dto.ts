@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, IsInt } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { CashMovementType } from '@prisma/client';
 
@@ -16,8 +16,8 @@ export class CreateCashMovementDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUUID()
-  paymentId?: string;
+  @IsInt()
+  paymentId?: number;
 }
 
 export class UpdateCashMovementDto {

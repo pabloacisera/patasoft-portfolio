@@ -1,3 +1,5 @@
+import { createSpinner } from './Spinner.js';
+
 export function createStepForm(options) {
   const { steps, onComplete, onCancel, initialStep = 1 } = options;
 
@@ -24,10 +26,11 @@ export function createStepForm(options) {
     const stepEl = document.createElement('div');
     stepEl.className = `step-form-step ${index + 1 === currentStep ? 'active' : ''} ${index + 1 < currentStep ? 'completed' : ''}`;
     stepEl.dataset.step = index + 1;
-    stepEl.innerHTML = `
+    stepEl.replaceChildren();
+    stepEl.insertAdjacentHTML('beforeend', `
       <span class="step-number">${index + 1 < currentStep ? '✓' : index + 1}</span>
       <span class="step-title">${step.title}</span>
-    `;
+    `);
     stepsHeader.appendChild(stepEl);
   });
   
@@ -56,23 +59,30 @@ export function createStepForm(options) {
   async function renderStep() {
     const step = steps[currentStep - 1];
     
-    contentContainer.innerHTML = '<div class="step-form-loading">Cargando...</div>';
+    contentContainer.replaceChildren();
+    const loadingEl = document.createElement('div');
+    loadingEl.className = 'step-form-loading';
+    loadingEl.appendChild(createSpinner({ size: '40px' }));
+    loadingEl.insertAdjacentHTML('beforeend', '<span>Cargando...</span>');
+    contentContainer.appendChild(loadingEl);
     
     try {
-      contentContainer.innerHTML = '';
+      contentContainer.replaceChildren();
       
       const content = await step.content(contentContainer, stepData);
       
       if (content !== undefined && content !== null) {
         if (typeof content === 'string') {
-          contentContainer.innerHTML = content;
+          contentContainer.replaceChildren();
+          contentContainer.insertAdjacentHTML('beforeend', content);
         } else if (content instanceof HTMLElement) {
-          contentContainer.innerHTML = '';
+          contentContainer.replaceChildren();
           contentContainer.appendChild(content);
         }
       }
     } catch (error) {
-      contentContainer.innerHTML = `<div class="step-form-error">Error: ${error.message}</div>`;
+      contentContainer.replaceChildren();
+      contentContainer.insertAdjacentHTML('beforeend', `<div class="step-form-error">Error: ${error.message}</div>`);
     }
 
     updateUI();

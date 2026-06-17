@@ -1,14 +1,15 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiResponse } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
 import { PetsService } from './pets.service';
 import { PdfService } from '../documents/pdf.service';
 import { CreatePetDto, UpdatePetDto } from './dto/pet.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 import { Response } from 'express';
 import { BadRequestException } from '@nestjs/common';
+import { PetResponseDto, MedicalRecordResponseDto } from '../common/dto/response.dto';
 
 @ApiTags('pets')
 @ApiBearerAuth()
@@ -21,27 +22,32 @@ export class PetsController {
   ) {}
 
   @Get()
+  @ApiResponse({ status: 200, type: [PetResponseDto] })
   findAll(@CurrentUser() user: any, @Query() query: any) {
     return this.petsService.findAll(user.companyId, query);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+  @ApiResponse({ status: 200, type: PetResponseDto })
+  findOne(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.petsService.findOne(id, user.companyId);
   }
 
   @Post()
+  @ApiResponse({ status: 201, type: PetResponseDto })
   create(@Body() dto: CreatePetDto, @CurrentUser() user: any) {
     return this.petsService.create(user.companyId, dto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdatePetDto, @CurrentUser() user: any) {
+  @ApiResponse({ status: 200, type: PetResponseDto })
+  update(@Param('id', ParseHashIdPipe) id: number, @Body() dto: UpdatePetDto, @CurrentUser() user: any) {
     return this.petsService.update(id, user.companyId, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
+  @ApiResponse({ status: 200 })
+  remove(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.petsService.remove(id, user.companyId);
   }
 
@@ -56,8 +62,9 @@ export class PetsController {
     },
   }))
   @ApiConsumes('multipart/form-data')
+  @ApiResponse({ status: 201 })
   async uploadPhoto(
-    @Param('id') id: string,
+    @Param('id', ParseHashIdPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: any,
   ) {
@@ -66,17 +73,20 @@ export class PetsController {
   }
 
   @Delete(':id/photos/:photoId')
-  deletePhoto(@Param('id') id: string, @Param('photoId') photoId: string, @CurrentUser() user: any) {
+  @ApiResponse({ status: 200 })
+  deletePhoto(@Param('id', ParseHashIdPipe) id: number, @Param('photoId', ParseHashIdPipe) photoId: number, @CurrentUser() user: any) {
     return this.petsService.deletePhoto(id, photoId, user.companyId);
   }
 
   @Get(':id/medical-records')
-  getMedicalRecords(@Param('id') id: string, @CurrentUser() user: any) {
+  @ApiResponse({ status: 200, type: [MedicalRecordResponseDto] })
+  getMedicalRecords(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.petsService.getMedicalRecords(id, user.companyId);
   }
 
   @Get(':id/medical-history/pdf')
-  async getMedicalHistoryPdf(@Param('id') id: string, @CurrentUser() user: any, @Res() res: Response) {
+  @ApiResponse({ status: 200, description: 'Generates a PDF of the medical history' })
+  async getMedicalHistoryPdf(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any, @Res() res: Response) {
     const pdfBuffer = await this.pdfService.generateMedicalHistory(id, user.companyId);
     res.set({
       'Content-Type': 'application/pdf',

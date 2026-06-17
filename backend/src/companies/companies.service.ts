@@ -32,7 +32,7 @@ export class CompaniesService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: number) {
     const company = await this.prisma.company.findUnique({
       where: { id },
       include: { config: true, subscription: true, users: { select: { id: true, name: true, email: true, role: true } } },
@@ -45,7 +45,7 @@ export class CompaniesService {
     return company;
   }
 
-  async findMyCompany(userId: string) {
+  async findMyCompany(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { company: { include: { config: true, subscription: true } } },
@@ -58,7 +58,7 @@ export class CompaniesService {
     return user.company;
   }
 
-  async create(userId: string, dto: CreateCompanyDto) {
+  async create(userId: number, dto: CreateCompanyDto) {
     const existingUser = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -126,7 +126,7 @@ export class CompaniesService {
     return company;
   }
 
-  async update(id: string, userId: string, dto: UpdateCompanyDto) {
+  async update(id: number, userId: number, dto: UpdateCompanyDto) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -164,7 +164,7 @@ export class CompaniesService {
     return company;
   }
 
-  async delete(id: string, userId: string) {
+  async delete(id: number, userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -191,7 +191,7 @@ export class CompaniesService {
     });
   }
 
-  async search(q: string, excludeCompanyId: string) {
+  async search(q: string, excludeCompanyId: number) {
     if (!q || q.length < 2) return [];
     return this.prisma.company.findMany({
       where: {

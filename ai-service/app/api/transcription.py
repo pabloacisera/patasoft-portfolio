@@ -6,11 +6,17 @@ load_dotenv()
 
 router = APIRouter()
 
+MAX_FILE_SIZE = 25 * 1024 * 1024
+
 @router.post("")
 async def transcribe(file: UploadFile = File(...)):
     try:
         if not file.content_type.startswith("audio/"):
             raise HTTPException(status_code=400, detail="El archivo debe ser de audio")
+        
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="El archivo excede el tamaño máximo de 25MB")
         
         import tempfile
         from openai import OpenAI
@@ -18,7 +24,6 @@ async def transcribe(file: UploadFile = File(...)):
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.split('.')[-1]}") as tmp:
-            content = await file.read()
             tmp.write(content)
             tmp_path = tmp.name
         

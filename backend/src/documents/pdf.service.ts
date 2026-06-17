@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import * as Handlebars from 'handlebars';
@@ -7,15 +7,85 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
-export class PdfService {
+export class PdfService implements OnModuleDestroy {
   private readonly logger = new Logger(PdfService.name);
+  private readonly browserPool: Array<puppeteer.Browser | null> = [null, null];
+  private nextBrowserIndex = 0;
 
   constructor(
     private prisma: PrismaService,
     private cloudinaryService: CloudinaryService,
   ) {}
 
-  async generatePetCard(petId: string, companyId: string): Promise<Buffer> {
+  async onModuleDestroy() {
+    for (let i = 0; i < this.browserPool.length; i++) {
+      const browser = this.browserPool[i];
+      if (browser) {
+        await browser.close().catch(e => this.logger.warn('Error closing browser:', e.message));
+        this.browserPool[i] = null;
+      }
+    }
+  }
+
+  private async getBrowser(): Promise<puppeteer.Browser> {
+    for (const current of this.browserPool) {
+      if (!current) continue;
+      try {
+        const isConnected = typeof current.isConnected === 'function' ? current.isConnected() : true;
+        if (isConnected) {
+          const pages = await current.pages();
+          if (pages.length < 10) {
+            return current;
+          }
+        }
+      } catch {
+        // Drop unhealthy browsers below.
+      }
+    }
+
+    const slot = this.browserPool.findIndex(browser => !browser);
+    if (slot >= 0) {
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+      this.browserPool[slot] = browser;
+      return browser;
+    }
+
+    const recycleSlot = this.nextBrowserIndex % this.browserPool.length;
+    this.nextBrowserIndex += 1;
+    const existing = this.browserPool[recycleSlot];
+    if (existing) {
+      this.logger.warn(`Recycling browser slot ${recycleSlot}`);
+      await existing.close().catch(e => this.logger.warn('Error closing recycled browser:', e.message));
+    }
+
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+    this.browserPool[recycleSlot] = browser;
+    return browser;
+  }
+
+  private async generatePdf(html: string, options: { format?: any, margin?: any } = {}): Promise<Buffer> {
+    const browser = await this.getBrowser();
+    const page = await browser.newPage();
+    try {
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      const pdf = await page.pdf({
+        format: options.format || 'A4',
+        printBackground: true,
+        margin: options.margin || { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
+      });
+      return Buffer.from(pdf);
+    } finally {
+      await page.close().catch(() => {});
+    }
+  }
+
+  async generatePetCard(petId: number, companyId: number): Promise<Buffer> {
     const pet = await this.prisma.pet.findFirst({
       where: { id: petId, companyId },
       include: {
@@ -66,25 +136,10 @@ export class PdfService {
       generatedAt: new Date().toLocaleString('es-AR'),
     });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
-    });
-
-    await browser.close();
-    return Buffer.from(pdf);
+    return this.generatePdf(html);
   }
 
-  async generateReceipt(paymentId: string, companyId: string): Promise<Buffer> {
+  async generateReceipt(paymentId: number, companyId: number): Promise<Buffer> {
     const payment = await this.prisma.payment.findFirst({
       where: { id: paymentId, companyId },
       include: {
@@ -108,7 +163,7 @@ export class PdfService {
       companyName: company?.name,
       companyAddress: company?.address,
       companyPhone: company?.phone,
-      receiptNumber: payment.id.slice(-8).toUpperCase(),
+      receiptNumber: String(payment.id).slice(-8).toUpperCase(),
       date: payment.createdAt.toLocaleDateString('es-AR'),
       clientName: `${payment.client?.name || ''} ${payment.client?.lastName || ''}`.trim() || 'Consumidor Final',
       items: payment.items.map(i => ({
@@ -122,22 +177,7 @@ export class PdfService {
       status: payment.status,
     });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
-    });
-
-    await browser.close();
-    return Buffer.from(pdf);
+    return this.generatePdf(html, { margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } });
   }
 
   private calculateAge(birthDate: Date): string {
@@ -152,7 +192,7 @@ export class PdfService {
     return `${years} año${years > 1 ? 's' : ''}`;
   }
 
-  async generateMedicalHistory(petId: string, companyId: string): Promise<Buffer> {
+  async generateMedicalHistory(petId: number, companyId: number): Promise<Buffer> {
     const pet = await this.prisma.pet.findFirst({
       where: { id: petId, companyId },
       include: {
@@ -169,7 +209,7 @@ export class PdfService {
           orderBy: { createdAt: 'desc' },
         },
       },
-    }) as any;
+    });
 
     if (!pet) throw new NotFoundException('Mascota no encontrada');
     if (pet.isDeleted) throw new NotFoundException('Mascota eliminada');
@@ -206,28 +246,28 @@ export class PdfService {
       companyName: company?.name,
       companyAddress: company?.address,
       companyPhone: company?.phone,
-      records: pet.medicalRecords.map(r => ({
+      records: pet.medicalRecords.map((r: any) => ({
         date: r.date.toLocaleDateString('es-AR'),
         visitReason: r.visitReason,
         diagnosis: r.diagnosis || '-',
         treatment: r.treatment || '-',
-        procedures: r.procedures.map(p => ({
-          name: p.name,
-          price: p.customPrice || '-',
-        })),
-        prescriptions: r.prescriptions.map(p => ({
+          procedures: r.procedures.map((p: any) => ({
+            name: p.name,
+            price: p.customPrice || '-',
+          })),
+          prescriptions: r.prescriptions.map((p: any) => ({
           medicineName: p.medicineName,
           dose: p.dose || '-',
           duration: p.duration || '-',
         })),
       })),
-      payments: (pet.payments || []).filter((p: any) => !p.isDeleted).map(p => ({
+      payments: (pet.payments || []).filter((p: any) => !p.isDeleted).map((p: any) => ({
         date: p.createdAt.toLocaleDateString('es-AR'),
         amountValue: p.totalAmount.toFixed(2),
         status: p.status,
         method: p.method || '-',
       })),
-      debts: (pet.payments || []).filter((p: any) => p.debt && !p.debt.isDeleted).map(p => ({
+      debts: (pet.payments || []).filter((p: any) => p.debt && !p.debt.isDeleted).map((p: any) => ({
         amountValue: p.debt.amount.toFixed(2),
         status: p.debt.status,
         dueDate: p.debt.dueDate.toLocaleDateString('es-AR'),
@@ -235,25 +275,10 @@ export class PdfService {
       generatedAt: new Date().toLocaleString('es-AR'),
     });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
-    });
-
-    await browser.close();
-    return Buffer.from(pdf);
+    return this.generatePdf(html);
   }
 
-  async generateAndStorePrescription(recordId: string, companyId: string) {
+  async generateAndStorePrescription(recordId: number, companyId: number) {
     const record = await this.prisma.medicalRecord.findFirst({
       where: { id: recordId },
       include: {
@@ -279,7 +304,7 @@ export class PdfService {
 
     const html = compiled({
       company,
-      recordId: recordId.slice(-8).toUpperCase(),
+      recordId: String(recordId).slice(-8).toUpperCase(),
       date: new Date().toLocaleDateString('es-AR'),
       pet: record.pet,
       diagnosis: record.diagnosis,
@@ -297,21 +322,7 @@ export class PdfService {
       veterinarian: record.veterinarianId || 'Veterinario',
     });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' },
-    });
-
-    await browser.close();
+    const pdf = await this.generatePdf(html);
 
     // Upload to Cloudinary
     const cloudinary = this.cloudinaryService.getClient();
@@ -326,7 +337,7 @@ export class PdfService {
       data: {
         companyId,
         type: 'EXPORT_PDF',
-        name: `Receta #${recordId.slice(-8)}`,
+        name: `Receta #${String(recordId).slice(-8)}`,
         cloudinaryUrl: uploadResult.secure_url,
         cloudinaryId: uploadResult.public_id,
         folder,
@@ -338,7 +349,7 @@ export class PdfService {
     return Buffer.from(pdf);
   }
 
-  async generateAndStoreReceipt(paymentId: string, companyId: string) {
+  async generateAndStoreReceipt(paymentId: number, companyId: number) {
     const payment = await this.prisma.payment.findFirst({
       where: { id: paymentId, companyId },
       include: {
@@ -375,7 +386,7 @@ export class PdfService {
 
     const html = compiled({
       company,
-      paymentId: paymentId.slice(-8).toUpperCase(),
+      paymentId: String(paymentId).slice(-8).toUpperCase(),
       date: payment.createdAt.toLocaleDateString('es-AR'),
       clientName: payment.client ? `${payment.client.name} ${payment.client.lastName || ''}`.trim() : 'Consumidor Final',
       clientDni: payment.client?.dni || '-',
@@ -386,21 +397,7 @@ export class PdfService {
       total: total.toFixed(2),
     });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' },
-    });
-
-    await browser.close();
+    const pdf = await this.generatePdf(html, { margin: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } });
 
     // Upload to Cloudinary
     const cloudinary = this.cloudinaryService.getClient();
@@ -416,7 +413,7 @@ export class PdfService {
         data: {
           companyId,
           type: 'PAYMENT_RECEIPT',
-          name: `Comprobante #${paymentId.slice(-8)}`,
+          name: `Comprobante #${String(paymentId).slice(-8)}`,
           cloudinaryUrl: uploadResult.secure_url,
           cloudinaryId: uploadResult.public_id,
           folder,
@@ -433,20 +430,14 @@ export class PdfService {
   }
 
   private async createPrescriptionTemplate() {
-    const templatePath = path.join(__dirname, 'templates', 'prescription.hbs');
-    // Template is in external file - this just ensures it exists
     return;
   }
 
   private async createReceiptTemplate() {
-    const templatePath = path.join(__dirname, 'templates', 'receipt.hbs');
-    // Template is in external file - this just ensures it exists
     return;
   }
 
   private async createMedicalHistoryTemplate() {
-    const templatePath = path.join(__dirname, 'templates', 'medical-history.hbs');
-    // Template is in external file - this just ensures it exists
     return;
   }
 }

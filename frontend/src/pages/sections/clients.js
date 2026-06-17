@@ -1,18 +1,25 @@
 import { api } from '../../services/api.js';
+import { escapeHtml } from '../../utils/escape.js';
 import { createSearchBar } from '../../components/SearchBar.js';
-import { createPagination } from '../../components/Pagination.js';
-import { openModal } from '../../components/Modal.js';
+import { VirtualScroll } from '../../utils/virtualScroll.js';
+import Modal, { openModal } from '../../components/Modal.js';
 import { showToast } from '../../components/Toast.js';
 import { showFieldError } from '../../utils/validators.js';
 
+let clientsController = null;
+let clientsVS = null;
+
 export async function loadClientsData(pageData, page = 1, search = '') {
+  if (clientsController) clientsController.abort();
+  clientsController = new AbortController();
   try {
     const params = { page, limit: 20 };
     if (search) params.search = search;
     
-    const result = await api.get('/clients', params);
+    const result = await api.get('/clients', params, { signal: clientsController.signal });
     pageData.clients = { ...result, page, search };
   } catch (e) {
+    if (e.name === 'AbortError') return;
     pageData.clients = { data: [], meta: { total: 0 }, page, search };
   }
 }
@@ -20,14 +27,15 @@ export async function loadClientsData(pageData, page = 1, search = '') {
 export async function renderClientsPage(content, pageData) {
   const data = pageData.clients || { data: [], meta: { total: 0 } };
   
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <div class="page-header">
       <div id="search-clients"></div>
       <button class="btn btn-primary" id="add-client-btn">Nuevo Cliente</button>
     </div>
     <div id="clients-list"></div>
     <div id="clients-pagination"></div>
-  `;
+  `);
   
   const searchBar = createSearchBar({
     placeholder: 'Buscar clientes...',
@@ -42,23 +50,24 @@ export async function renderClientsPage(content, pageData) {
   
   const listEl = document.getElementById('clients-list');
   if (data.data?.length) {
-    listEl.innerHTML = `
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Acciones</th></tr></thead>
         <tbody>${data.data.map(c => `
           <tr>
-            <td>${c.name} ${c.lastName || ''}</td>
-            <td>${c.email || '-'}</td>
-            <td>${c.phone || '-'}</td>
+            <td>${escapeHtml(c.name)} ${escapeHtml(c.lastName || '')}</td>
+            <td>${escapeHtml(c.email || '-')}</td>
+            <td>${escapeHtml(c.phone || '-')}</td>
             <td>
-              <button class="btn btn-outline btn-sm" data-id="${c.id}" data-action="view">Ver</button>
-              <button class="btn btn-outline btn-sm" data-id="${c.id}" data-action="edit">Editar</button>
-              <button class="btn btn-danger btn-sm" data-id="${c.id}" data-action="delete">Eliminar</button>
+              <button class="btn btn-outline btn-sm" data-id="${escapeHtml(c.id)}" data-action="view">Ver</button>
+              <button class="btn btn-outline btn-sm" data-id="${escapeHtml(c.id)}" data-action="edit">Editar</button>
+              <button class="btn btn-danger btn-sm" data-id="${escapeHtml(c.id)}" data-action="delete">Eliminar</button>
             </td>
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
     
     listEl.querySelectorAll('[data-action="view"]').forEach(btn => {
       btn.addEventListener('click', () => showClientDetail(btn.dataset.id, pageData));
@@ -72,21 +81,49 @@ export async function renderClientsPage(content, pageData) {
       btn.addEventListener('click', () => deleteClient(btn.dataset.id, pageData));
     });
   } else {
-    listEl.innerHTML = '<div class="empty-state"><p>No hay clientes</p></div>';
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay clientes</p></div>');
   }
   
-  const paginationEl = document.getElementById('clients-pagination');
+  if (clientsVS) clientsVS.destroy();
   if (data.meta?.totalPages > 1) {
-    const pagination = createPagination({
-      total: data.meta.total,
-      page: data.page || 1,
-      limit: 20,
-      onPageChange: async (newPage) => {
-        await loadClientsData(pageData, newPage, pageData.clients?.search || '');
-        renderClientsPage(document.getElementById('page-content'), pageData);
+    const tbody = document.querySelector('#clients-list tbody');
+    const table = document.querySelector('#clients-list table');
+    clientsVS = new VirtualScroll({
+      container: table || listEl,
+      tableHeadHtml: '<tr><th>Nombre</th><th>Email</th><th>Teléfono</th><th>Acciones</th></tr>',
+      getTbody: () => tbody,
+      pageSize: 20,
+      fetchPage: async (page) => {
+        const result = await api.get('/clients', { page, limit: 20, search: pageData.clients?.search || '' });
+        return result;
+      },
+      renderRow: (c) => `
+        <tr>
+          <td>${escapeHtml(c.name)} ${escapeHtml(c.lastName || '')}</td>
+          <td>${escapeHtml(c.email || '-')}</td>
+          <td>${escapeHtml(c.phone || '-')}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" data-id="${escapeHtml(c.id)}" data-action="view">Ver</button>
+            <button class="btn btn-outline btn-sm" data-id="${escapeHtml(c.id)}" data-action="edit">Editar</button>
+            <button class="btn btn-danger btn-sm" data-id="${escapeHtml(c.id)}" data-action="delete">Eliminar</button>
+          </td>
+        </tr>`,
+      afterRender: (all) => {
+        pageData.clients = { ...pageData.clients, data: all };
+        const container = document.querySelector('#clients-list table') || listEl;
+        container.querySelectorAll('[data-action="view"]').forEach(btn => {
+          btn.addEventListener('click', () => showClientDetail(btn.dataset.id, pageData));
+        });
+        container.querySelectorAll('[data-action="edit"]').forEach(btn => {
+          btn.addEventListener('click', () => showEditClientModal(btn.dataset.id, pageData));
+        });
+        container.querySelectorAll('[data-action="delete"]').forEach(btn => {
+          btn.addEventListener('click', () => deleteClient(btn.dataset.id, pageData));
+        });
       }
     });
-    paginationEl.appendChild(pagination);
+    clientsVS.init(2);
   }
   
   document.getElementById('add-client-btn')?.addEventListener('click', () => showClientModal(null, pageData));
@@ -97,13 +134,13 @@ function showClientDetail(clientId, pageData) {
   if (!client) return;
   
   openModal({
-    title: `Cliente: ${client.name} ${client.lastName || ''}`,
+    title: `Cliente: ${escapeHtml(client.name)} ${escapeHtml(client.lastName || '')}`,
     size: 'lg',
     content: `
-      <div class="detail-row"><span>DNI:</span><span>${client.dni || '-'}</span></div>
-      <div class="detail-row"><span>Email:</span><span>${client.email || '-'}</span></div>
-      <div class="detail-row"><span>Teléfono:</span><span>${client.phone || '-'}</span></div>
-      <div class="detail-row"><span>Dirección:</span><span>${client.address || '-'}</span></div>
+      <div class="detail-row"><span>DNI:</span><span>${escapeHtml(client.dni || '-')}</span></div>
+      <div class="detail-row"><span>Email:</span><span>${escapeHtml(client.email || '-')}</span></div>
+      <div class="detail-row"><span>Teléfono:</span><span>${escapeHtml(client.phone || '-')}</span></div>
+      <div class="detail-row"><span>Dirección:</span><span>${escapeHtml(client.address || '-')}</span></div>
       <hr style="margin:16px 0">
       <h4 style="margin-bottom:8px">Mascotas</h4>
       <div id="client-pets-list">Cargando...</div>
@@ -117,15 +154,17 @@ function showClientDetail(clientId, pageData) {
     const el = document.getElementById('client-pets-list');
     if (!el) return;
     if (pets?.length) {
-      el.innerHTML = pets.map(p => 
-        `<div class="detail-row"><span>${p.name}</span><span>${p.species || ''} ${p.breed || ''}</span></div>`
-      ).join('');
+      el.replaceChildren();
+      el.insertAdjacentHTML('beforeend', pets.map(p => 
+        `<div class="detail-row"><span>${escapeHtml(p.name)}</span><span>${escapeHtml(p.species || '')} ${escapeHtml(p.breed || '')}</span></div>`
+      ).join(''));
     } else {
-      el.innerHTML = '<div style="color:var(--text-secondary);font-size:var(--text-sm)">No tiene mascotas registradas</div>';
+      el.replaceChildren();
+      el.insertAdjacentHTML('beforeend', '<div style="color:var(--text-secondary);font-size:var(--text-sm)">No tiene mascotas registradas</div>');
     }
   }).catch(() => {
     const el = document.getElementById('client-pets-list');
-    if (el) el.innerHTML = '<div style="color:var(--text-secondary);font-size:var(--text-sm)">Error cargando mascotas</div>';
+    if (el) { el.replaceChildren(); el.insertAdjacentHTML('beforeend', '<div style="color:var(--text-secondary);font-size:var(--text-sm)">Error cargando mascotas</div>'); }
   });
 }
 
@@ -139,27 +178,27 @@ export function showClientModal(clientId, pageData) {
       <form id="client-form">
         <div class="form-group">
           <label class="form-label required">Nombre</label>
-          <input type="text" class="form-input" id="client-name" value="${client?.name || ''}">
+          <input type="text" class="form-input" id="client-name" value="${escapeHtml(client?.name || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Apellido</label>
-          <input type="text" class="form-input" id="client-lastName" value="${client?.lastName || ''}">
+          <input type="text" class="form-input" id="client-lastName" value="${escapeHtml(client?.lastName || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">DNI</label>
-          <input type="text" class="form-input" id="client-dni" value="${client?.dni || ''}">
+          <input type="text" class="form-input" id="client-dni" value="${escapeHtml(client?.dni || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Email</label>
-          <input type="email" class="form-input" id="client-email" value="${client?.email || ''}">
+          <input type="email" class="form-input" id="client-email" value="${escapeHtml(client?.email || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Teléfono</label>
-          <input type="tel" class="form-input" id="client-phone" value="${client?.phone || ''}">
+          <input type="tel" class="form-input" id="client-phone" value="${escapeHtml(client?.phone || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Dirección</label>
-          <input type="text" class="form-input" id="client-address" value="${client?.address || ''}">
+          <input type="text" class="form-input" id="client-address" value="${escapeHtml(client?.address || '')}">
         </div>
       </form>
     `,
@@ -204,7 +243,7 @@ export function showEditClientModal(clientId, pageData) {
 }
 
 export async function deleteClient(clientId, pageData) {
-  const confirmed = window.confirm('¿Estás seguro de eliminar este cliente?');
+  const confirmed = await Modal.confirm('¿Estás seguro de eliminar este cliente?');
   if (!confirmed) return;
   
   try {

@@ -9,7 +9,7 @@ export class ConnectionsService {
   private readonly logger = new Logger(ConnectionsService.name);
   constructor(private prisma: PrismaService) {}
 
-  async findAll(companyId: string, q: QueryConnectionDto = {}) {
+  async findAll(companyId: number, q: QueryConnectionDto = {}) {
     const page = Number(q.page) || 1;
     const limit = Number(q.limit) || 20;
     const status = q.status;
@@ -34,7 +34,7 @@ export class ConnectionsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const c = await this.prisma.companyConnection.findFirst({
       where: { id, OR: [{ companyAId: companyId }, { companyBId: companyId }] },
       include: { companyA: true, companyB: true },
@@ -43,7 +43,7 @@ export class ConnectionsService {
     return c;
   }
 
-  async create(companyId: string, dto: CreateConnectionDto) {
+  async create(companyId: number, dto: CreateConnectionDto) {
     if (companyId === dto.companyBId) {
       throw new BadRequestException('No puedes conectar contigo mismo');
     }
@@ -70,7 +70,7 @@ export class ConnectionsService {
     return connection;
   }
 
-  async update(id: string, companyId: string, dto: UpdateConnectionDto) {
+  async update(id: number, companyId: number, dto: UpdateConnectionDto) {
     const existing = await this.findOne(id, companyId);
     if (existing.companyAId !== companyId && existing.companyBId !== companyId) {
       throw new BadRequestException('No autorizado');
@@ -88,12 +88,12 @@ export class ConnectionsService {
     });
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: number, companyId: number) {
     const existing = await this.findOne(id, companyId);
     await this.prisma.companyConnection.delete({ where: { id } });
   }
 
-  async getConnectedCompanies(companyId: string) {
+  async getConnectedCompanies(companyId: number) {
     const connections = await this.prisma.companyConnection.findMany({
       where: {
         OR: [{ companyAId: companyId }, { companyBId: companyId }],
@@ -105,7 +105,7 @@ export class ConnectionsService {
     return connections.map((c) => (c.companyAId === companyId ? c.companyB : c.companyA));
   }
 
-  async shareMedicalRecords(companyId: string, dto: ShareMedicalRecordsDto) {
+  async shareMedicalRecords(companyId: number, dto: ShareMedicalRecordsDto) {
     const connection = await this.prisma.companyConnection.findFirst({
       where: {
         OR: [{ companyAId: companyId, companyBId: dto.targetCompanyId }, { companyAId: dto.targetCompanyId, companyBId: companyId }],
@@ -124,7 +124,7 @@ export class ConnectionsService {
     return { sharedRecords: records.length, notes: dto.notes };
   }
 
-  async getSharedMedicalRecords(companyId: string, fromCompanyId: string) {
+  async getSharedMedicalRecords(companyId: number, fromCompanyId: number) {
     const connection = await this.prisma.companyConnection.findFirst({
       where: {
         OR: [{ companyAId: companyId, companyBId: fromCompanyId }, { companyAId: fromCompanyId, companyBId: companyId }],

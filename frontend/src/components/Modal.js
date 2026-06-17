@@ -16,14 +16,18 @@ const Modal = {
 
     const modal = document.createElement('div');
     modal.className = `modal modal-${size}`;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'modal-title');
 
     const zIndex = 1000 + modalStack.length * 10;
     overlay.style.zIndex = zIndex.toString();
     modal.style.zIndex = zIndex.toString();
 
-    modal.innerHTML = `
+    modal.replaceChildren();
+    modal.insertAdjacentHTML('beforeend', `
       <div class="modal-header">
-        <h3 class="modal-title">${title}</h3>
+        <h3 class="modal-title" id="modal-title">${title}</h3>
         <button class="modal-close" data-modal-close>&times;</button>
       </div>
       <div class="modal-body">
@@ -33,7 +37,7 @@ const Modal = {
         ${showCancel ? `<button class="btn btn-secondary" data-modal-cancel>${cancelText}</button>` : ''}
         ${showConfirm ? `<button class="btn btn-primary" data-modal-confirm>${confirmText}</button>` : ''}
       </div>
-    `;
+    `);
 
     if (typeof content === 'function') {
       const contentContainer = modal.querySelector('.modal-body');
@@ -46,6 +50,7 @@ const Modal = {
     if (modalStack.length === 0) {
       document.body.classList.add('modal-open');
       document.addEventListener('keydown', handleEscape);
+      document.addEventListener('keydown', handleFocusTrap);
     }
 
     const modalData = { overlay, modal, onConfirm, onCancel };
@@ -89,6 +94,8 @@ const Modal = {
 
     requestAnimationFrame(() => {
       overlay.classList.add('modal-visible');
+      const firstFocusable = modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (firstFocusable) firstFocusable.focus();
     });
 
     return modal;
@@ -113,6 +120,7 @@ const Modal = {
       } else {
         document.body.classList.remove('modal-open');
         document.removeEventListener('keydown', handleEscape);
+        document.removeEventListener('keydown', handleFocusTrap);
       }
     }, 300);
   },
@@ -133,7 +141,8 @@ const Modal = {
     if (typeof content === 'function') {
       content(body);
     } else {
-      body.innerHTML = content;
+      body.replaceChildren();
+      body.insertAdjacentHTML('beforeend', content);
     }
   },
 
@@ -141,17 +150,19 @@ const Modal = {
     if (modalStack.length === 0) return;
     const activeModal = modalStack[modalStack.length - 1];
     const footer = activeModal.modal.querySelector('.modal-footer');
-    footer.innerHTML = '<span class="modal-loading">Cargando...</span>';
+    footer.replaceChildren();
+    footer.insertAdjacentHTML('beforeend', '<span class="modal-loading">Cargando...</span>');
   },
 
   hideLoading(confirmText = 'Confirmar', showCancel = true) {
     if (modalStack.length === 0) return;
     const activeModal = modalStack[modalStack.length - 1];
     const footer = activeModal.modal.querySelector('.modal-footer');
-    footer.innerHTML = `
+    footer.replaceChildren();
+    footer.insertAdjacentHTML('beforeend', `
       ${showCancel ? '<button class="btn btn-secondary" data-modal-cancel>Cancelar</button>' : ''}
       <button class="btn btn-primary" data-modal-confirm">${confirmText}</button>
-    `;
+    `);
 
     const cancelBtn = footer.querySelector('[data-modal-cancel]');
     cancelBtn?.addEventListener('click', () => {
@@ -198,6 +209,28 @@ function handleEscape(e) {
       activeModal.onCancel();
     }
     Modal.close();
+  }
+}
+
+function handleFocusTrap(e) {
+  if (e.key !== 'Tab' || modalStack.length === 0) return;
+  const activeModal = modalStack[modalStack.length - 1];
+  const focusable = activeModal.modal.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey) {
+    if (document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else {
+    if (document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 }
 
@@ -284,7 +317,8 @@ export function openModal(optionsOrName, extraOptions = {}) {
         fieldsHTML = `<input type="hidden" id="modal-field-type" value="${type}">` + fieldsHTML;
       }
       
-      container.innerHTML = fieldsHTML || optionsOrName;
+      container.replaceChildren();
+      container.insertAdjacentHTML('beforeend', fieldsHTML || optionsOrName);
     };
   } else {
     options = optionsOrName;
@@ -292,6 +326,19 @@ export function openModal(optionsOrName, extraOptions = {}) {
   
   return Modal.open(options);
 }
+
+Modal.confirm = function(message) {
+  return new Promise((resolve) => {
+    this.open({
+      title: 'Confirmar',
+      content: `<p>${message}</p>`,
+      confirmText: 'Aceptar',
+      cancelText: 'Cancelar',
+      onConfirm: () => resolve(true),
+      onCancel: () => resolve(false),
+    });
+  });
+};
 
 export function closeModal() {
   return Modal.close();

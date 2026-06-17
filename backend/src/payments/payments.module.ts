@@ -7,6 +7,7 @@ import { MercadopagoModule } from '../mercadopago/mercadopago.module';
 import { PdfModule } from '../documents/pdf.module';
 import { CashRegisterModule } from '../cash-register/cash-register.module';
 import { QueuesModule } from '../queues/queues.module';
+import { SuppliesModule } from '../supplies/supplies.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { QueuesModule } from '../queues/queues.module';
     PdfModule,
     CashRegisterModule,
     QueuesModule,
+    SuppliesModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },

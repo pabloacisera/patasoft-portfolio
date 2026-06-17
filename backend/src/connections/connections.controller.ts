@@ -5,6 +5,7 @@ import { CreateConnectionDto, UpdateConnectionDto, QueryConnectionDto } from './
 import { ShareMedicalRecordsDto } from './dto/share-medical-records.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('connections')
 @ApiBearerAuth()
@@ -21,7 +22,7 @@ export class ConnectionsController {
     return this.connectionsService.getConnectedCompanies(user.companyId);
   }
 
-  @Get(':id') findOne(@Param('id') id: string, @CurrentUser() user: any) {
+  @Get(':id') findOne(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.connectionsService.findOne(id, user.companyId);
   }
 
@@ -29,11 +30,11 @@ export class ConnectionsController {
     return this.connectionsService.create(user.companyId, dto);
   }
 
-  @Patch(':id') update(@Param('id') id: string, @Body() dto: UpdateConnectionDto, @CurrentUser() user: any) {
+  @Patch(':id') update(@Param('id', ParseHashIdPipe) id: number, @Body() dto: UpdateConnectionDto, @CurrentUser() user: any) {
     return this.connectionsService.update(id, user.companyId, dto);
   }
 
-  @Delete(':id') remove(@Param('id') id: string, @CurrentUser() user: any) {
+  @Delete(':id') remove(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() user: any) {
     return this.connectionsService.remove(id, user.companyId);
   }
 
@@ -41,7 +42,7 @@ export class ConnectionsController {
     return this.connectionsService.shareMedicalRecords(user.companyId, dto);
   }
 
-  @Get('shared/:fromCompanyId') getSharedMedicalRecords(@Param('fromCompanyId') fromCompanyId: string, @CurrentUser() user: any) {
+  @Get('shared/:fromCompanyId') getSharedMedicalRecords(@Param('fromCompanyId', ParseHashIdPipe) fromCompanyId: number, @CurrentUser() user: any) {
     return this.connectionsService.getSharedMedicalRecords(user.companyId, fromCompanyId);
   }
 }

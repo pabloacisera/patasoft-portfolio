@@ -1,0 +1,116 @@
+version: "3.8"
+
+# ⚠️  Docker-compose provee infraestructura local (postgres, redis, servicios)
+# pero NO incluye Cloudflare Tunnel. Para funcionalidad completa con Google OAuth
+# y webhooks de MercadoPago, usá scripts/server.sh (que lanza tunnel + backend + frontend).
+#
+# Sin tunnel: CRUD, chat IA local, login por email funcionan correctamente.
+# Con tunnel: Google OAuth, MP webhooks, pagos reales.
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: patasoft-db
+    environment:
+      POSTGRES_USER: patasoft
+      POSTGRES_PASSWORD: patasoft_dev
+      POSTGRES_DB: patasoft_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U patasoft"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: patasoft-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: patasoft-backend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://patasoft:patasoft_dev@postgres:5432/patasoft_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRES_IN: 30m
+      JWT_REFRESH_EXPIRES_IN: 30d
+      FRONTEND_URL: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://localhost
+      SCALE_MODE: local
+      AI_SERVICE_URL: http://ai-service:8000
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
+      MP_APP_ID: ${MP_APP_ID}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: http://localhost:3000/api/v1/auth/google/callback
+      MJ_APIKEY: ${MJ_APIKEY}
+      MJ_APISECRET: ${MJ_APISECRET}
+      MJ_SENDER_EMAIL: noreply@patasoft.app
+      MJ_SENDER_NAME: PataSoft
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: patasoft-ai
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://patasoft:patasoft_dev@postgres:5432/patasoft_db
+      REDIS_URL: redis://redis:6379
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      CHROMA_PERSIST_DIR: /data/chroma_db
+      BACKEND_URL: http://backend:3000
+    volumes:
+      - chroma_data:/data/chroma_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: patasoft-frontend
+    ports:
+      - "5173:80"
+    environment:
+      API_URL: http://backend:3000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  chroma_data:

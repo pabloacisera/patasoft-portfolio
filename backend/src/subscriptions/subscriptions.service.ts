@@ -15,11 +15,12 @@ export class SubscriptionsService {
     private config: ConfigService,
     private prisma: PrismaService,
     private redis: RedisService,
+    // forwardRef necesario: dependencia circular SubscriptionsService -> EventsGateway
     @Inject(forwardRef(() => EventsGateway))
     private eventsGateway: EventsGateway,
   ) {}
 
-  async getStatus(companyId: string) {
+  async getStatus(companyId: number) {
     const subscription = await this.prisma.subscription.findUnique({
       where: { companyId },
     });
@@ -31,7 +32,7 @@ export class SubscriptionsService {
     return subscription;
   }
 
-  async createCheckout(companyId: string, dto: CreateSubscriptionCheckoutDto) {
+  async createCheckout(companyId: number, dto: CreateSubscriptionCheckoutDto) {
     const mpAccessToken = this.config.get('MP_ACCESS_TOKEN');
     if (!mpAccessToken) {
       throw new BadRequestException('MercadoPago no configurado en el servidor');
@@ -128,7 +129,7 @@ export class SubscriptionsService {
     return { received: true };
   }
 
-  private async activateSubscription(companyId: string, plan: SubscriptionPlanDto) {
+  private async activateSubscription(companyId: number, plan: SubscriptionPlanDto) {
     const expiresAt = new Date();
     if ((plan as string) === 'TEST') {
       expiresAt.setDate(expiresAt.getDate() + 2);
@@ -173,7 +174,7 @@ export class SubscriptionsService {
     this.logger.log(`Subscription activated for company ${companyId}`);
   }
 
-  async cancel(companyId: string) {
+  async cancel(companyId: number) {
     await this.prisma.subscription.update({
       where: { companyId },
       data: {

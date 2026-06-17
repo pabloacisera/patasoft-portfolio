@@ -51,7 +51,8 @@ async function loadSubscriptionsData(page = 1) {
 async function renderAdminPage() {
   const app = document.getElementById('app');
   
-  app.innerHTML = `
+  app.replaceChildren();
+  app.insertAdjacentHTML('beforeend', `
     <div class="dashboard-layout">
       <aside class="sidebar">
         <div class="sidebar-logo">PataSoft</div>
@@ -73,7 +74,7 @@ async function renderAdminPage() {
         <main class="page-content" id="page-content"></main>
       </div>
     </div>
-  `;
+  `);
 
   await renderAdminContent();
 }
@@ -83,7 +84,8 @@ async function renderAdminContent() {
   const companies = pageData.companies?.data || [];
   const subscriptions = pageData.subscriptions?.data || [];
 
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <div class="admin-tabs">
       <div class="admin-tab active" data-tab="companies">Empresas</div>
       <div class="admin-tab" data-tab="subscriptions">Suscripciones</div>
@@ -104,7 +106,7 @@ async function renderAdminContent() {
     <div id="tab-subscriptions" class="admin-section">
       <div id="subscriptions-list"></div>
     </div>
-  `;
+  `);
 
   document.querySelectorAll('.admin-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -143,7 +145,8 @@ function renderCompaniesList() {
   if (!listEl) return;
 
   if (data.data?.length) {
-    listEl.innerHTML = `
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Nombre</th><th>Email</th><th>Estado</th><th>Suscripción</th><th>Fecha creación</th><th>Acciones</th></tr></thead>
         <tbody>${data.data.map(c => `
@@ -162,7 +165,7 @@ function renderCompaniesList() {
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
 
     listEl.querySelectorAll('[data-action="block"]').forEach(btn => {
       btn.addEventListener('click', () => showBlockModal(btn.dataset.id, true));
@@ -172,7 +175,8 @@ function renderCompaniesList() {
       btn.addEventListener('click', () => showBlockModal(btn.dataset.id, false));
     });
   } else {
-    listEl.innerHTML = '<div class="empty-state"><p>No hay empresas</p></div>';
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay empresas</p></div>');
   }
 }
 
@@ -183,7 +187,8 @@ function renderSubscriptionsList() {
   if (!listEl) return;
 
   if (data.data?.length) {
-    listEl.innerHTML = `
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Empresa</th><th>Plan</th><th>Estado</th><th>Inicio</th><th>Vencimiento</th></tr></thead>
         <tbody>${data.data.map(s => `
@@ -196,9 +201,8 @@ function renderSubscriptionsList() {
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
   } else {
-    listEl.innerHTML = '<div class="empty-state"><p>No hay suscripciones</p></div>';
   }
 }
 

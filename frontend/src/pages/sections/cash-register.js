@@ -3,6 +3,8 @@ import { formatCurrency, formatDateTime } from '../../utils/formatters.js';
 import { createPagination } from '../../components/Pagination.js';
 import { openModal } from '../../components/Modal.js';
 import { showToast } from '../../components/Toast.js';
+import { escapeHtml } from '../../utils/escape.js';
+import { showFieldError } from '../../utils/validators.js';
 
 export async function renderCashRegisterPage(content, pageData) {
   if (!content) return;
@@ -42,7 +44,8 @@ export async function renderCashRegisterPage(content, pageData) {
     console.error('[Caja] Error loading data:', e);
   }
   
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <style>
       .cash-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-bottom: var(--space-4); }
       .cash-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); text-align: center; }
@@ -75,15 +78,15 @@ export async function renderCashRegisterPage(content, pageData) {
       </div>
     </div>
     <div class="cash-filters">
-      <input type="date" class="form-input" id="cash-filter-date" value="${dc.date || ''}" style="width:150px" title="Fecha">
-      <input type="date" class="form-input" id="cash-filter-startDate" value="${dc.startDate || ''}" style="width:150px" title="Desde">
-      <input type="date" class="form-input" id="cash-filter-endDate" value="${dc.endDate || ''}" style="width:150px" title="Hasta">
+      <input type="date" class="form-input" id="cash-filter-date" value="${escapeHtml(dc.date || '')}" style="width:150px" title="Fecha">
+      <input type="date" class="form-input" id="cash-filter-startDate" value="${escapeHtml(dc.startDate || '')}" style="width:150px" title="Desde">
+      <input type="date" class="form-input" id="cash-filter-endDate" value="${escapeHtml(dc.endDate || '')}" style="width:150px" title="Hasta">
       <select class="form-input" id="cash-filter-type" style="width:130px">
         <option value="">Todos</option>
         <option value="INCOME" ${dc.type === 'INCOME' ? 'selected' : ''}>Ingresos</option>
         <option value="EXPENSE" ${dc.type === 'EXPENSE' ? 'selected' : ''}>Egresos</option>
       </select>
-      <input type="text" class="form-input" id="cash-filter-search" placeholder="Buscar concepto..." value="${dc.search || ''}" style="flex:1;min-width:150px">
+      <input type="text" class="form-input" id="cash-filter-search" placeholder="Buscar concepto..." value="${escapeHtml(dc.search || '')}" style="flex:1;min-width:150px">
       <button class="btn btn-outline btn-sm" id="cash-search-btn">Buscar</button>
       <button class="btn btn-outline btn-sm" id="cash-clear-btn">Limpiar</button>
     </div>
@@ -105,7 +108,7 @@ export async function renderCashRegisterPage(content, pageData) {
       </table>
     </div>
     <div id="cash-pagination"></div>
-  `;
+  `);
   
   renderCashTableRows(movementsData.data, pageData);
   
@@ -154,25 +157,27 @@ function renderCashTableRows(movements, pageData) {
   if (!tbody) return;
   
   if (!movements?.length) {
-    tbody.innerHTML = '<tr><td colspan="6">No hay movimientos</td></tr>';
+    tbody.replaceChildren();
+    tbody.insertAdjacentHTML('beforeend', '<tr><td colspan="6">No hay movimientos</td></tr>');
     return;
   }
   
-  tbody.innerHTML = movements.map(m => `
+  tbody.replaceChildren();
+  tbody.insertAdjacentHTML('beforeend', movements.map(m => `
     <tr>
       <td>${formatDateTime(m.date || m.createdAt)}</td>
       <td><span class="badge badge-${m.type === 'INCOME' ? 'success' : 'danger'}">${m.type === 'INCOME' ? 'Ingreso' : 'Egreso'}</span></td>
       <td style="font-weight:600">${formatCurrency(m.amount)}</td>
-      <td>${m.reason || '-'}</td>
+      <td>${escapeHtml(m.reason || '-')}</td>
       <td>${m.payment ? formatCurrency(m.payment.totalAmount) : '-'}</td>
       <td>
         ${!m.paymentId ? `
-          <button class="btn btn-outline btn-sm" data-id="${m.id}" data-action="edit-cash">Editar</button>
-          <button class="btn btn-danger btn-sm" data-id="${m.id}" data-action="delete-cash">Eliminar</button>
+          <button class="btn btn-outline btn-sm" data-id="${escapeHtml(m.id)}" data-action="edit-cash">Editar</button>
+          <button class="btn btn-danger btn-sm" data-id="${escapeHtml(m.id)}" data-action="delete-cash">Eliminar</button>
         ` : '<span style="font-size:var(--text-xs);color:var(--text-secondary)">Vinculado</span>'}
       </td>
     </tr>
-  `).join('');
+  `).join(''));
   
   tbody.querySelectorAll('[data-action="edit-cash"]').forEach(btn => {
     btn.addEventListener('click', () => showEditCashMovementModal(btn.dataset.id, pageData));
@@ -204,14 +209,16 @@ export function showCashMovementModal(type, pageData) {
     `,
     confirmText: 'Guardar',
     onConfirm: async () => {
+      document.querySelectorAll('.field-error').forEach(el => el.remove());
+      document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
       const amount = parseFloat(document.getElementById('cash-amount').value);
       const reason = document.getElementById('cash-reason').value.trim();
       const cashType = document.getElementById('cash-type').value;
       
-      if (!amount || amount <= 0 || !reason) {
-        showToast('Debe ingresar monto y concepto', 'error');
-        return false;
-      }
+      let hasError = false;
+      if (!amount || amount <= 0) { showFieldError('cash-amount', 'Debe ingresar un monto válido'); hasError = true; }
+      if (!reason) { showFieldError('cash-reason', 'Debe ingresar un concepto'); hasError = true; }
+      if (hasError) return false;
       
       try {
         await api.post('/cash-register', { type: cashType, amount, reason });
@@ -240,13 +247,15 @@ export function showEditCashMovementModal(movementId, pageData) {
     `,
     confirmText: 'Guardar',
     onConfirm: async () => {
+      document.querySelectorAll('.field-error').forEach(el => el.remove());
+      document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
       const amount = parseFloat(document.getElementById('cash-edit-amount').value);
       const reason = document.getElementById('cash-edit-reason').value.trim();
       
-      if (!amount || amount <= 0 || !reason) {
-        showToast('Debe ingresar monto y concepto', 'error');
-        return false;
-      }
+      let hasError = false;
+      if (!amount || amount <= 0) { showFieldError('cash-edit-amount', 'Debe ingresar un monto válido'); hasError = true; }
+      if (!reason) { showFieldError('cash-edit-reason', 'Debe ingresar un concepto'); hasError = true; }
+      if (hasError) return false;
       
       try {
         await api.patch(`/cash-register/${movementId}`, { amount, reason });
@@ -261,7 +270,7 @@ export function showEditCashMovementModal(movementId, pageData) {
 }
 
 export async function deleteCashMovement(movementId, pageData) {
-  const confirmed = window.confirm('¿Estás seguro de eliminar este movimiento?');
+  const confirmed = await Modal.confirm('¿Estás seguro de eliminar este movimiento?');
   if (!confirmed) return;
   
   try {

@@ -1,4 +1,4 @@
-import { Injectable, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Injectable, ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,6 +6,8 @@ import { RedisService } from '../../redis/redis.service';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
+  private readonly logger = new Logger(JwtAuthGuard.name);
+
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
@@ -110,7 +112,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       if (e instanceof ForbiddenException && e.message.includes('SUBSCRIPTION_EXPIRED')) {
         throw e;
       }
-      // No bloquear requests si falla el check de suscripción
+      if (e instanceof ForbiddenException) {
+        throw e;
+      }
+      this.logger.warn(`Subscription check falló, permitiendo request: ${e.message}`);
     }
 
     return true;

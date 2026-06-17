@@ -15,7 +15,7 @@ export class DebtsService {
     private cashService: CashRegisterService,
   ) {}
 
-  async findAll(companyId: string, q: any = {}) {
+  async findAll(companyId: number, q: any = {}) {
     const page = Number(q.page) || 1;
     const limit = Number(q.limit) || 20;
     const status = q.status;
@@ -29,18 +29,18 @@ export class DebtsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const d = await this.prisma.debt.findFirst({ where: { id, companyId }, include: { client: true, payment: true } });
     if (!d) throw new NotFoundException('Deuda no encontrada');
     return d;
   }
 
-  async cancel(id: string, companyId: string) {
+  async cancel(id: number, companyId: number) {
     await this.findOne(id, companyId);
     return this.prisma.debt.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date() } });
   }
 
-  async markPaid(id: string, companyId: string, dto?: { method?: string, amount?: number }) {
+  async markPaid(id: number, companyId: number, dto?: { method?: string, amount?: number }) {
     const debt = await this.findOne(id, companyId);
     const pendingAmount = debt.amount - (debt.payment?.paidAmount || 0);
     
@@ -104,16 +104,16 @@ export class DebtsService {
     return { amount: Math.round(totalAmount * 100) / 100, breakdown };
   }
 
-  async getPreviewAmount(id: string, companyId: string) {
+  async getPreviewAmount(id: number, companyId: number) {
     const debt = await this.findOne(id, companyId);
     return this.calculateDebtAmount(debt);
   }
 
-  async getOverdue(companyId: string) {
+  async getOverdue(companyId: number) {
     return this.prisma.debt.findMany({ where: { companyId, status: 'PENDING', dueDate: { lt: new Date() } }, include: { client: true } });
   }
 
-  async exportExcel(companyId: string) {
+  async exportExcel(companyId: number) {
     const debts = await this.prisma.debt.findMany({
       where: { companyId },
       include: { client: true },
@@ -180,7 +180,8 @@ export class DebtsService {
         { folder, resource_type: 'raw', public_id: filename },
         (error, result) => {
           if (error) reject(error);
-          else resolve({ url: result.secure_url, publicId: result.public_id });
+          else if (result) resolve({ url: result.secure_url, publicId: result.public_id });
+          else reject(new Error('Upload failed'));
         }
       ).end(buffer);
     });

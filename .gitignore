@@ -48,9 +48,11 @@ pip-delete-this-directory.txt
 docker/postgres-data/
 docker/redis-data/
 chroma_db/
+chroma_data/
 *.rdb
 *.sql
 *.sqlite
+*.sqlite3
 
 # --- Entorno y Secretos ---
 .env
@@ -70,8 +72,8 @@ Thumbs.db
 # --- Específicos del Proyecto ---
 /agent
 /errors.txt
-.env.example
 logs/
+_app.zip
 prompt.txt
 TASKS.txt
 mp_data_fake.txt

@@ -41,11 +41,13 @@ export class CloudinaryService {
           if (error) {
             this.logger.error(`Error uploading: ${error.message}`);
             reject(error);
-          } else {
+          } else if (result) {
             resolve({
               url: result.secure_url,
               publicId: result.public_id,
             });
+          } else {
+            reject(new Error('Upload failed'));
           }
         });
       } else {
@@ -53,11 +55,13 @@ export class CloudinaryService {
           if (error) {
             this.logger.error(`Error uploading: ${error.message}`);
             reject(error);
-          } else {
+          } else if (result) {
             resolve({
               url: result.secure_url,
               publicId: result.public_id,
             });
+          } else {
+            reject(new Error('Upload failed'));
           }
         }).end(file);
       }
@@ -79,7 +83,7 @@ export class CloudinaryService {
 
   async createFolder(path: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      cloudinary.api.create_folder(path, (error) => {
+      cloudinary.api.create_folder(path, (error: any) => {
         if (error && error.message !== 'Folder already exists') {
           this.logger.warn(`Folder warning: ${error.message}`);
         }

@@ -1,11 +1,10 @@
 import os
 import json
-import redis
 from typing import Any, Dict, List, Optional
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from app.redis_pool import get_redis_client
 
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 MAX_HISTORY = 20
 
 
@@ -14,7 +13,7 @@ class CompanyMemory:
         self.company_id = company_id
         self.key_prefix = f"ai_memory:{company_id}:"
         
-        self.redis = redis.from_url(REDIS_URL, decode_responses=True)
+        self.redis = get_redis_client()
     
     def _get_key(self, session_id: str = "default") -> str:
         return f"{self.key_prefix}{session_id}"
@@ -76,7 +75,13 @@ class CompanyMemory:
     
     def clear_all(self):
         pattern = f"{self.key_prefix}*"
-        keys = self.redis.keys(pattern)
+        cursor = 0
+        keys = []
+        while True:
+            cursor, batch = self.redis.scan(cursor=cursor, match=pattern)
+            keys.extend(batch)
+            if cursor == 0:
+                break
         if keys:
             self.redis.delete(*keys)
 
@@ -87,26 +92,35 @@ def get_company_memory(company_id: str) -> CompanyMemory:
 
 class CompanyMemoryStore:
     def __init__(self):
-        self.redis = redis.from_url(REDIS_URL, decode_responses=True)
+        self.redis = get_redis_client()
     
     def get_memory(self, company_id: str) -> CompanyMemory:
         return CompanyMemory(company_id)
     
     def list_sessions(self, company_id: str) -> List[str]:
         pattern = f"ai_memory:{company_id}:*"
-        keys = self.redis.keys(pattern)
-        
+        cursor = 0
         sessions = []
-        for key in keys:
-            session_id = key.replace(f"ai_memory:{company_id}:", "")
-            if session_id:
-                sessions.append(session_id)
+        while True:
+            cursor, keys = self.redis.scan(cursor=cursor, match=pattern)
+            for key in keys:
+                session_id = key.replace(f"ai_memory:{company_id}:", "")
+                if session_id:
+                    sessions.append(session_id)
+            if cursor == 0:
+                break
         
         return sessions
     
     def delete_company_memory(self, company_id: str):
         pattern = f"ai_memory:{company_id}:*"
-        keys = self.redis.keys(pattern)
+        cursor = 0
+        keys = []
+        while True:
+            cursor, batch = self.redis.scan(cursor=cursor, match=pattern)
+            keys.extend(batch)
+            if cursor == 0:
+                break
         if keys:
             self.redis.delete(*keys)
 

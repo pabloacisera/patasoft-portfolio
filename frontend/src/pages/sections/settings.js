@@ -2,8 +2,11 @@ import { api } from '../../services/api.js';
 import { router } from '../../router.js';
 import { formatDate, formatCurrency, formatStatus } from '../../utils/formatters.js';
 import { createPagination } from '../../components/Pagination.js';
-import { openModal, closeModal } from '../../components/Modal.js';
+import Modal, { openModal, closeModal } from '../../components/Modal.js';
 import { showToast } from '../../components/Toast.js';
+import { escapeHtml } from '../../utils/escape.js';
+import { showFieldError } from '../../utils/validators.js';
+import { createSpinner } from '../../components/Spinner.js';
 
 function debounce(fn, delay = 300) {
   let timer;
@@ -16,7 +19,8 @@ function debounce(fn, delay = 300) {
 export async function renderSettingsPage(tab, pageData) {
   const content = document.getElementById('page-content');
   if (!content) return;
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <style>
       .subscription-status-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-6); margin-bottom: var(--space-6); }
       .subscription-status-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); }
@@ -58,7 +62,7 @@ export async function renderSettingsPage(tab, pageData) {
       <a class="settings-tab ${tab === 'export' ? 'active' : ''}" href="/settings/export-data">Exportar datos</a>
     </div>
     <div id="settings-content"></div>
-  `;
+  `);
   
   document.querySelectorAll('.settings-tab').forEach(t => {
     t.addEventListener('click', (e) => {
@@ -84,36 +88,37 @@ async function renderSettingsCompanyContent(content, pageData) {
   try {
     const { data: company } = await api.get('/companies/me');
     
-    content.innerHTML = `
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', `
       <div class="settings-section">
         <h3>Información de la Empresa</h3>
         <div class="form-group">
           <label class="form-label">Nombre</label>
-          <input type="text" class="form-input" id="company-name" value="${company?.name || ''}">
+          <input type="text" class="form-input" id="company-name" value="${escapeHtml(company?.name || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Razón Social</label>
-          <input type="text" class="form-input" id="company-legalName" value="${company?.legalName || ''}">
+          <input type="text" class="form-input" id="company-legalName" value="${escapeHtml(company?.legalName || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Teléfono</label>
-          <input type="tel" class="form-input" id="company-phone" value="${company?.phone || ''}">
+          <input type="tel" class="form-input" id="company-phone" value="${escapeHtml(company?.phone || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Dirección</label>
-          <input type="text" class="form-input" id="company-address" value="${company?.address || ''}">
+          <input type="text" class="form-input" id="company-address" value="${escapeHtml(company?.address || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Email</label>
-          <input type="email" class="form-input" id="company-email" value="${company?.email || ''}">
+          <input type="email" class="form-input" id="company-email" value="${escapeHtml(company?.email || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Website</label>
-          <input type="url" class="form-input" id="company-website" value="${company?.website || ''}">
+          <input type="url" class="form-input" id="company-website" value="${escapeHtml(company?.website || '')}">
         </div>
         <button class="btn btn-primary" id="save-company-btn">Guardar</button>
       </div>
-    `;
+    `);
     
     document.getElementById('save-company-btn').addEventListener('click', async () => {
       try {
@@ -131,18 +136,26 @@ async function renderSettingsCompanyContent(content, pageData) {
       }
     });
   } catch (e) {
-    content.innerHTML = '<div class="empty-state"><p>Error cargando datos</p></div>';
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>Error cargando datos</p></div>');
   }
 }
 
 async function renderSettingsSubscriptionContent(content, pageData) {
-  content.innerHTML = '<div class="loading-spinner"></div>';
+  content.replaceChildren();
+  const loadingEl = document.createElement('div');
+  loadingEl.style.display = 'flex';
+  loadingEl.style.justifyContent = 'center';
+  loadingEl.style.padding = '40px';
+  loadingEl.appendChild(createSpinner({ size: '40px' }));
+  content.appendChild(loadingEl);
   
   let sub;
   try {
     sub = await api.get('/subscriptions/status');
   } catch (e) {
-    content.innerHTML = '<div class="empty-state"><p>Error cargando suscripción. Intenta nuevamente.</p></div>';
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>Error cargando suscripción. Intenta nuevamente.</p></div>');
     return;
   }
 
@@ -181,7 +194,8 @@ async function renderSettingsSubscriptionContent(content, pageData) {
     </div>
   ` : '';
 
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <div class="settings-section">
       <h3>Suscripción</h3>
 
@@ -192,10 +206,10 @@ async function renderSettingsSubscriptionContent(content, pageData) {
         <div class="subscription-status-header">
           <div>
             <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-1);">Plan actual</div>
-            <div style="font-size: var(--text-xl); font-weight: 700;">${planLabels[sub.plan] || sub.plan}</div>
+            <div style="font-size: var(--text-xl); font-weight: 700;">${escapeHtml(planLabels[sub.plan] || sub.plan)}</div>
           </div>
           <span class="subscription-badge ${statusBadgeClass[sub.status] || 'badge-trial'}">
-            ${statusLabels[sub.status] || sub.status}
+            ${escapeHtml(statusLabels[sub.status] || sub.status)}
           </span>
         </div>
         <div class="subscription-meta">
@@ -288,7 +302,7 @@ async function renderSettingsSubscriptionContent(content, pageData) {
         </div>
       ` : ''}
     </div>
-  `;
+  `);
 
   async function handleSubscribe(plan) {
     const btn = document.getElementById(`btn-subscribe-${plan.toLowerCase()}`);
@@ -352,14 +366,21 @@ async function renderSettingsSubscriptionContent(content, pageData) {
 }
 
 async function renderSettingsMercadoPagoContent(content, pageData) {
-  content.innerHTML = '<div class="loading-spinner">Cargando...</div>';
+  content.replaceChildren();
+  const loadingEl = document.createElement('div');
+  loadingEl.style.display = 'flex';
+  loadingEl.style.justifyContent = 'center';
+  loadingEl.style.padding = '40px';
+  loadingEl.appendChild(createSpinner({ size: '40px' }));
+  content.appendChild(loadingEl);
   
   try {
     const mpStatus = await api.get('/mercadopago/oauth/status').catch(() => ({ connected: false }));
     
     const isConnected = mpStatus.connected;
     
-    content.innerHTML = `
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', `
       <div class="settings-section">
         <h3>MercadoPago</h3>
         <p style="color: var(--text-secondary); font-size: var(--text-sm); margin-bottom: var(--space-4);">
@@ -371,7 +392,7 @@ async function renderSettingsMercadoPagoContent(content, pageData) {
             <div style="display: flex; flex-direction: column; align-items: center; gap: var(--space-3);">
               <div style="width: 60px; height: 60px; border-radius: 50%; background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">✓</div>
               <div style="font-weight: 600; color: #065f46;">Cuenta conectada</div>
-              ${mpStatus.nickname ? `<div style="font-size: var(--text-sm); color: var(--text-secondary);">@${mpStatus.nickname}</div>` : ''}
+              ${mpStatus.nickname ? `<div style="font-size: var(--text-sm); color: var(--text-secondary);">@${escapeHtml(mpStatus.nickname)}</div>` : ''}
               <button class="btn btn-outline btn-sm" id="mp-disconnect-btn" style="margin-top: var(--space-2);">Desconectar</button>
             </div>
           ` : `
@@ -391,17 +412,17 @@ async function renderSettingsMercadoPagoContent(content, pageData) {
             <h4 style="font-size: var(--text-base); margin-bottom: var(--space-3);">Configuración avanzada</h4>
             <div class="form-group">
               <label class="form-label">Access Token</label>
-              <input type="password" class="form-input" id="mp-access-token" value="${mpStatus.accessTokenMasked || ''}" placeholder="Access Token">
+              <input type="password" class="form-input" id="mp-access-token" value="${escapeHtml(mpStatus.accessTokenMasked || '')}" placeholder="Access Token">
             </div>
             <div class="form-group">
               <label class="form-label">Public Key</label>
-              <input type="text" class="form-input" id="mp-public-key" value="${mpStatus.publicKey || ''}" placeholder="Public Key">
+              <input type="text" class="form-input" id="mp-public-key" value="${escapeHtml(mpStatus.publicKey || '')}" placeholder="Public Key">
             </div>
             <button class="btn btn-outline" id="save-mp-btn">Guardar manualmente</button>
           </div>
         ` : ''}
       </div>
-    `;
+    `);
     
     document.getElementById('mp-connect-btn')?.addEventListener('click', async () => {
       try {
@@ -413,7 +434,7 @@ async function renderSettingsMercadoPagoContent(content, pageData) {
     });
 
     document.getElementById('mp-disconnect-btn')?.addEventListener('click', async () => {
-      const confirmed = window.confirm('¿Desconectar tu cuenta de MercadoPago? No podrás recibir pagos electrónicos.');
+      const confirmed = await Modal.confirm('¿Desconectar tu cuenta de MercadoPago? No podrás recibir pagos electrónicos.');
       if (!confirmed) return;
       try {
         await api.delete('/mercadopago/oauth/disconnect');
@@ -445,18 +466,24 @@ async function renderSettingsMercadoPagoContent(content, pageData) {
       history.replaceState(null, '', window.location.pathname);
     }
   } catch (e) {
-    content.innerHTML = '<div class="empty-state"><p>Error cargando configuración de MercadoPago</p></div>';
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>Error cargando configuración de MercadoPago</p></div>');
   }
 }
 
+let priceItemsController = null;
+
 export async function loadPriceItemsData(pageData, page = 1, search = '') {
+  if (priceItemsController) priceItemsController.abort();
+  priceItemsController = new AbortController();
   try {
     const params = { page, limit: 20 };
     if (search) params.search = search;
     
-    const result = await api.get('/price-items', params);
+    const result = await api.get('/price-items', params, { signal: priceItemsController.signal });
     pageData.priceItems = { ...result, page, search };
   } catch (e) {
+    if (e.name === 'AbortError') return;
     pageData.priceItems = { data: [], meta: { total: 0 }, page, search };
   }
 }
@@ -464,24 +491,34 @@ export async function loadPriceItemsData(pageData, page = 1, search = '') {
 export async function renderSettingsPricesContent(content, pageData) {
   const data = pageData.priceItems || { data: [], meta: { total: 0 } };
   
-  content.innerHTML = `
-    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <input type="text" class="form-input" id="prices-search" placeholder="Buscar precios..." value="${pageData.priceItems?.search || ''}" style="flex:1;max-width:300px">
-      <button class="btn btn-primary" id="add-price-btn">Nuevo Precio</button>
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap">
+      <input type="text" class="form-input" id="prices-search" placeholder="Buscar precios..." value="${escapeHtml(pageData.priceItems?.search || '')}" style="flex:1;max-width:300px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" id="download-prices-template-btn">📥 Plantilla</button>
+        <button class="btn btn-outline" id="export-prices-btn">📤 Exportar</button>
+        <button class="btn btn-outline" id="import-prices-btn">
+          📂 Importar
+          <input type="file" id="import-prices-input" accept=".xlsx,.xls" style="display:none">
+        </button>
+        <button class="btn btn-primary" id="add-price-btn">Nuevo Precio</button>
+      </div>
     </div>
     <div id="prices-list"></div>
     <div id="prices-pagination"></div>
-  `;
+  `);
   
   const listEl = document.getElementById('prices-list');
   if (data.data?.length) {
-    listEl.innerHTML = `
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Acciones</th></tr></thead>
         <tbody>${data.data.map(p => `
           <tr>
-            <td>${p.name}</td>
-            <td>${p.category || '-'}</td>
+            <td>${escapeHtml(p.name)}</td>
+            <td>${escapeHtml(p.category || '-')}</td>
             <td>${formatCurrency(p.price)}</td>
             <td>
               <button class="btn btn-outline btn-sm" data-id="${p.id}" data-action="edit-price">Editar</button>
@@ -490,7 +527,7 @@ export async function renderSettingsPricesContent(content, pageData) {
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
     
     listEl.querySelectorAll('[data-action="edit-price"]').forEach(btn => {
       btn.addEventListener('click', () => showPriceModal(btn.dataset.id, pageData));
@@ -499,7 +536,8 @@ export async function renderSettingsPricesContent(content, pageData) {
       btn.addEventListener('click', () => deletePriceItem(btn.dataset.id, pageData));
     });
   } else {
-    listEl.innerHTML = '<div class="empty-state"><p>No hay precios</p></div>';
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay precios</p></div>');
   }
   
   if (data.meta?.totalPages > 1) {
@@ -517,6 +555,49 @@ export async function renderSettingsPricesContent(content, pageData) {
   }
   
   document.getElementById('add-price-btn')?.addEventListener('click', () => showPriceModal(null, pageData));
+  
+  document.getElementById('download-prices-template-btn')?.addEventListener('click', async () => {
+    try {
+      const blob = await api.getBlob('/price-items/template');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'plantilla-precios.xlsx'; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { showToast('Error al descargar plantilla', 'error'); }
+  });
+
+  document.getElementById('export-prices-btn')?.addEventListener('click', async () => {
+    try {
+      const { url } = await api.get('/price-items/export');
+      if (url) {
+        window.open(url, '_blank');
+        showToast('Lista de precios exportada', 'success');
+      }
+    } catch (e) { showToast('Error al exportar', 'error'); }
+  });
+
+  document.getElementById('import-prices-btn')?.addEventListener('click', () => {
+    document.getElementById('import-prices-input')?.click();
+  });
+
+  document.getElementById('import-prices-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      showToast('Importando precios...', 'info');
+      const result = await api.postFormData('/price-items/import', formData);
+      showToast(`✅ ${escapeHtml(result.imported)} precios importados correctamente`, 'success');
+      if (result.errors?.length) {
+        console.warn('Errores de importación:', result.errors);
+        showToast(`⚠️ ${escapeHtml(result.errors.length)} filas con errores (ver consola)`, 'warning');
+      }
+      await loadPriceItemsData(pageData, 1, pageData.priceItems?.search || '');
+      renderSettingsPricesContent(document.getElementById('settings-content'), pageData);
+    } catch (e) { showToast(e.message || 'Error al importar', 'error'); }
+    e.target.value = '';
+  });
+
   document.getElementById('prices-search')?.addEventListener('input', debounce(async (e) => {
     await loadPriceItemsData(pageData, 1, e.target.value);
     renderSettingsPricesContent(content, pageData);
@@ -532,30 +613,32 @@ export function showPriceModal(itemId, pageData) {
     content: `
       <div class="form-group">
         <label class="form-label required">Nombre</label>
-        <input type="text" class="form-input" id="price-name" value="${item?.name || ''}">
+        <input type="text" class="form-input" id="price-name" value="${escapeHtml(item?.name || '')}">
       </div>
       <div class="form-group">
         <label class="form-label">Categoría</label>
-        <input type="text" class="form-input" id="price-category" value="${item?.category || ''}">
+        <input type="text" class="form-input" id="price-category" value="${escapeHtml(item?.category || '')}">
       </div>
       <div class="form-group">
         <label class="form-label required">Precio</label>
-        <input type="number" class="form-input" id="price-value" step="0.01" value="${item?.price || ''}">
+        <input type="number" class="form-input" id="price-value" step="0.01" value="${escapeHtml(item?.price || '')}">
       </div>
       <div class="form-group">
         <label class="form-label">Descripción</label>
-        <textarea class="form-input" id="price-desc" rows="2">${item?.description || ''}</textarea>
+        <textarea class="form-input" id="price-desc" rows="2">${escapeHtml(item?.description || '')}</textarea>
       </div>
     `,
     confirmText: isEdit ? 'Guardar' : 'Crear',
     onConfirm: async () => {
+      document.querySelectorAll('.field-error').forEach(el => el.remove());
+      document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
       const name = document.getElementById('price-name').value.trim();
       const price = parseFloat(document.getElementById('price-value').value);
       
-      if (!name || !price || price <= 0) {
-        showToast('Nombre y precio son requeridos', 'error');
-        return false;
-      }
+      let hasError = false;
+      if (!name) { showFieldError('price-name', 'El nombre es requerido'); hasError = true; }
+      if (!price || price <= 0) { showFieldError('price-value', 'El precio es requerido'); hasError = true; }
+      if (hasError) return false;
       
       try {
         const payload = {
@@ -584,7 +667,7 @@ export function showPriceModal(itemId, pageData) {
 }
 
 export async function deletePriceItem(itemId, pageData) {
-  const confirmed = window.confirm('¿Estás seguro de eliminar este precio?');
+  const confirmed = await Modal.confirm('¿Estás seguro de eliminar este precio?');
   if (!confirmed) return;
   
   try {
@@ -604,7 +687,8 @@ async function renderSettingsAIContent(content, pageData) {
       api.get('/ai/rag/status').catch(() => ({ synced: false, documentsCount: 0 }))
     ]);
     
-    content.innerHTML = `
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', `
       <div class="settings-section">
         <h3>Configuración de IA</h3>
         <div class="form-group">
@@ -626,7 +710,7 @@ async function renderSettingsAIContent(content, pageData) {
             <div>
               <span style="font-weight: 600;">Estado del RAG</span>
               <span class="badge ${ragStatus?.documentsCount > 0 ? 'badge-success' : 'badge-warning'}" style="margin-left: var(--space-2);">
-                ${ragStatus?.documentsCount || 0} documentos
+                ${escapeHtml(ragStatus?.documentsCount || 0)} documentos
               </span>
             </div>
             <button class="btn btn-outline btn-sm" id="sync-rag-btn">🔄 Sincronizar datos</button>
@@ -648,7 +732,7 @@ async function renderSettingsAIContent(content, pageData) {
         </div>
         <div id="rag-files-list" style="margin-top: var(--space-4);"></div>
       </div>
-    `;
+    `);
     
     document.getElementById('save-ai-btn').addEventListener('click', async () => {
       try {
@@ -689,7 +773,8 @@ async function renderSettingsAIContent(content, pageData) {
       try {
         showToast('Sincronizando datos con el RAG...', 'info');
         const result = await api.post('/ai/rag/sync');
-        showToast(`✅ Sincronizado: ${result.synced?.clients || 0} clientes, ${result.synced?.pets || 0} mascotas, ${result.synced?.supplies || 0} insumos`, 'success');
+        const ing = result.ingested || {};
+        showToast(`✅ Sincronizado: ${escapeHtml(ing.clients || 0)} clientes, ${escapeHtml(ing.pets || 0)} mascotas, ${escapeHtml(ing.supplies || 0)} insumos`, 'success');
       } catch (err) {
         showToast(err.message || 'Error al sincronizar', 'error');
       } finally {
@@ -698,28 +783,31 @@ async function renderSettingsAIContent(content, pageData) {
       }
     });
   } catch (e) {
-    content.innerHTML = '<div class="empty-state"><p>Error cargando configuración</p></div>';
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>Error cargando configuración</p></div>');
   }
 }
 
 async function renderSettingsConnectionsContent(content, pageData) {
   const data = pageData.settingsConnections || { data: [], meta: { total: 0 } };
   
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <div class="page-header">
       <button class="btn btn-primary" id="request-connection-btn">Solicitar Conexión</button>
     </div>
     <div id="connections-list"></div>
-  `;
+  `);
   
   const listEl = document.getElementById('connections-list');
   if (data.data?.length) {
-    listEl.innerHTML = `
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Veterinaria</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody>${data.data.map(c => `
           <tr>
-            <td>${c.company?.name || '-'}</td>
+            <td>${escapeHtml(c.company?.name || '-')}</td>
             <td><span class="badge badge-${c.status === 'ACCEPTED' ? 'success' : 'warning'}">${formatStatus(c.status, 'connection')}</span></td>
             <td>
               ${c.status === 'PENDING' ? `<button class="btn btn-outline btn-sm" data-id="${c.id}" data-action="accept">Aceptar</button>` : ''}
@@ -727,7 +815,7 @@ async function renderSettingsConnectionsContent(content, pageData) {
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
 
     listEl.querySelectorAll('[data-action="accept"]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -742,7 +830,8 @@ async function renderSettingsConnectionsContent(content, pageData) {
       });
     });
   } else {
-    listEl.innerHTML = '<div class="empty-state"><p>No hay conexiones</p></div>';
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay conexiones</p></div>');
   }
 
   document.getElementById('request-connection-btn')?.addEventListener('click', () => {
@@ -760,29 +849,35 @@ async function renderSettingsConnectionsContent(content, pageData) {
     });
 
     let searchTimeout;
+    let companySearchController = null;
     document.getElementById('search-company-input')?.addEventListener('input', (e) => {
       clearTimeout(searchTimeout);
       const q = e.target.value.trim();
       if (q.length < 2) return;
       searchTimeout = setTimeout(async () => {
+        if (companySearchController) companySearchController.abort();
+        companySearchController = new AbortController();
         const resultsEl = document.getElementById('company-search-results');
         if (!resultsEl) return;
-        resultsEl.innerHTML = 'Buscando...';
+        resultsEl.replaceChildren();
+        resultsEl.insertAdjacentHTML('beforeend', 'Buscando...');
         try {
-          const companies = await api.get(`/companies/search?q=${encodeURIComponent(q)}`);
+          const companies = await api.get(`/companies/search?q=${encodeURIComponent(q)}`, {}, { signal: companySearchController.signal });
           if (!companies?.length) {
-            resultsEl.innerHTML = 'No se encontraron empresas.';
+            resultsEl.replaceChildren();
+            resultsEl.insertAdjacentHTML('beforeend', 'No se encontraron empresas.');
             return;
           }
-          resultsEl.innerHTML = companies.map(c => `
+          resultsEl.replaceChildren();
+          resultsEl.insertAdjacentHTML('beforeend', companies.map(c => `
             <div style="padding: 8px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <strong>${c.name}</strong>
-                ${c.email ? `<br><small>${c.email}</small>` : ''}
+                <strong>${escapeHtml(c.name)}</strong>
+                ${c.email ? `<br><small>${escapeHtml(c.email)}</small>` : ''}
               </div>
-              <button class="btn btn-outline btn-sm" data-company-id="${c.id}" data-company-name="${c.name}">Conectar</button>
+              <button class="btn btn-outline btn-sm" data-company-id="${escapeHtml(c.id)}" data-company-name="${escapeHtml(c.name)}">Conectar</button>
             </div>
-          `).join('');
+          `).join(''));
           resultsEl.querySelectorAll('button[data-company-id]').forEach(btn => {
             btn.addEventListener('click', async () => {
               btn.disabled = true;
@@ -801,7 +896,9 @@ async function renderSettingsConnectionsContent(content, pageData) {
             });
           });
         } catch (e) {
-          resultsEl.innerHTML = `Error: ${e.message}`;
+          if (e.name === 'AbortError') return;
+          resultsEl.replaceChildren();
+          resultsEl.insertAdjacentHTML('beforeend', `Error: ${escapeHtml(e.message)}`);
         }
       }, 400);
     });
@@ -813,7 +910,8 @@ async function loadConnectionsData(page, status) {
 }
 
 async function renderExportDataContent(content, pageData) {
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <div class="settings-section">
       <h3>Exportar Datos</h3>
       <p style="color: var(--text-secondary); font-size: var(--text-sm); margin-bottom: var(--space-4);">
@@ -821,7 +919,7 @@ async function renderExportDataContent(content, pageData) {
       </p>
       <button class="btn btn-primary" id="export-all-btn">📥 Exportar todo</button>
     </div>
-  `;
+  `);
   
   document.getElementById('export-all-btn')?.addEventListener('click', async () => {
     try {

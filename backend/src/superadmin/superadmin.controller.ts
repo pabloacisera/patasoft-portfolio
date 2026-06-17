@@ -6,6 +6,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { SuperAdminService } from './superadmin.service';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('superadmin')
 @ApiBearerAuth()
@@ -23,7 +24,7 @@ export class SuperAdminController {
 
   @Patch('companies/:id/subscription')
   @ApiOperation({ summary: 'Actualizar suscripción de empresa' })
-  async updateSubscription(@Param('id') companyId: string, @Body() dto: any) {
+  async updateSubscription(@Param('id', ParseHashIdPipe) companyId: number, @Body() dto: any) {
     return this.superAdminService.updateCompanySubscription(companyId, dto);
   }
 
@@ -41,7 +42,7 @@ export class SuperAdminController {
 
   @Get('companies/:id/payments')
   @ApiOperation({ summary: 'Historial de pagos de una empresa' })
-  async getCompanyPayments(@Param('id') companyId: string) {
+  async getCompanyPayments(@Param('id', ParseHashIdPipe) companyId: number) {
     return this.superAdminService.getCompanyPaymentHistory(companyId);
   }
 }

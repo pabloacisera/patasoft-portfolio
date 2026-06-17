@@ -10,7 +10,7 @@ export class DataService {
   private readonly logger = new Logger(DataService.name);
   constructor(private prisma: PrismaService) {}
 
-  async exportAll(companyId: string): Promise<Buffer> {
+  async exportAll(companyId: number): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
 
     await Promise.all([
@@ -46,7 +46,7 @@ export class DataService {
     };
   }
 
-  private async buildClientsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildClientsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Clientes');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -81,7 +81,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildPetsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildPetsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Mascotas');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -128,7 +128,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildMedicalRecordsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildMedicalRecordsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Historiales Clínicos');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -171,7 +171,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildProceduresSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildProceduresSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Procedimientos');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -203,7 +203,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildPrescriptionsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildPrescriptionsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Prescripciones');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -239,7 +239,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildPaymentsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildPaymentsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Pagos');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -283,7 +283,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildPaymentItemsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildPaymentItemsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Items de Pago');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -317,7 +317,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildDebtsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildDebtsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Deudas');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -354,7 +354,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildSuppliesSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildSuppliesSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Insumos');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -396,7 +396,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildSupplyPurchasesSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildSupplyPurchasesSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Compras');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -433,7 +433,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildCashMovementsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildCashMovementsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Movimientos de Caja');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },
@@ -465,7 +465,7 @@ export class DataService {
     this.styleHeaderRow(sheet);
   }
 
-  private async buildPriceItemsSheet(workbook: ExcelJS.Workbook, companyId: string) {
+  private async buildPriceItemsSheet(workbook: ExcelJS.Workbook, companyId: number) {
     const sheet = workbook.addWorksheet('Lista de Precios');
     sheet.columns = [
       { header: 'ID', key: 'id', width: 28 },

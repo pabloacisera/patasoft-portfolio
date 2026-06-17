@@ -1,16 +1,23 @@
 import { api } from '../../services/api.js';
+import { escapeHtml } from '../../utils/escape.js';
 import { formatDate, formatStatus } from '../../utils/formatters.js';
 import { openModal, closeModal } from '../../components/Modal.js';
 import { showToast } from '../../components/Toast.js';
 
+let connectionsController = null;
+let companySearchController = null;
+
 export async function loadConnectionsData(pageData, page = 1, status = '') {
+  if (connectionsController) connectionsController.abort();
+  connectionsController = new AbortController();
   try {
     const params = { page, limit: 20 };
     if (status) params.status = status;
     
-    const result = await api.get('/connections', params);
+    const result = await api.get('/connections', params, { signal: connectionsController.signal });
     pageData.connections = { ...result, page, status };
   } catch (e) {
+    if (e.name === 'AbortError') return;
     pageData.connections = { data: [], meta: { total: 0 }, page, status };
   }
 }
@@ -18,30 +25,32 @@ export async function loadConnectionsData(pageData, page = 1, status = '') {
 export async function renderConnectionsPage(content, pageData) {
   const data = pageData.connections || { data: [], meta: { total: 0 } };
   
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <div class="page-header">
       <button class="btn btn-primary" id="request-connection-btn">Solicitar Conexión</button>
     </div>
     <div id="connections-list"></div>
-  `;
+  `);
   
   const listEl = document.getElementById('connections-list');
   if (data.data?.length) {
-    listEl.innerHTML = `
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Veterinaria</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
         <tbody>${data.data.map(c => `
           <tr>
-            <td>${c.company?.name || '-'}</td>
+            <td>${escapeHtml(c.company?.name || '-')}</td>
             <td><span class="badge badge-${c.status === 'ACCEPTED' ? 'success' : c.status === 'PENDING' ? 'warning' : 'danger'}">${formatStatus(c.status, 'connection')}</span></td>
             <td>${formatDate(c.createdAt)}</td>
             <td>
-              ${c.status === 'PENDING' ? `<button class="btn btn-outline btn-sm" data-id="${c.id}" data-action="accept">Aceptar</button>` : ''}
+              ${c.status === 'PENDING' ? `<button class="btn btn-outline btn-sm" data-id="${escapeHtml(c.id)}" data-action="accept">Aceptar</button>` : ''}
             </td>
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
 
     listEl.querySelectorAll('[data-action="accept"]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -56,7 +65,8 @@ export async function renderConnectionsPage(content, pageData) {
       });
     });
   } else {
-    listEl.innerHTML = '<div class="empty-state"><p>No hay conexiones</p></div>';
+    listEl.replaceChildren();
+    listEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay conexiones</p></div>');
   }
 
   document.getElementById('request-connection-btn')?.addEventListener('click', () => {
@@ -81,22 +91,27 @@ export async function renderConnectionsPage(content, pageData) {
       searchTimeout = setTimeout(async () => {
         const resultsEl = document.getElementById('company-search-results');
         if (!resultsEl) return;
-        resultsEl.innerHTML = 'Buscando...';
+        if (companySearchController) companySearchController.abort();
+          companySearchController = new AbortController();
+          resultsEl.replaceChildren();
+          resultsEl.insertAdjacentHTML('beforeend', 'Buscando...');
         try {
-          const companies = await api.get(`/companies/search?q=${encodeURIComponent(q)}`);
+          const companies = await api.get(`/companies/search?q=${encodeURIComponent(q)}`, {}, { signal: companySearchController.signal });
           if (!companies?.length) {
-            resultsEl.innerHTML = 'No se encontraron empresas.';
+            resultsEl.replaceChildren();
+            resultsEl.insertAdjacentHTML('beforeend', 'No se encontraron empresas.');
             return;
           }
-          resultsEl.innerHTML = companies.map(c => `
+          resultsEl.replaceChildren();
+          resultsEl.insertAdjacentHTML('beforeend', companies.map(c => `
             <div style="padding: 8px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <strong>${c.name}</strong>
-                ${c.email ? `<br><small>${c.email}</small>` : ''}
+                <strong>${escapeHtml(c.name)}</strong>
+                ${c.email ? `<br><small>${escapeHtml(c.email)}</small>` : ''}
               </div>
-              <button class="btn btn-outline btn-sm" data-company-id="${c.id}" data-company-name="${c.name}">Conectar</button>
+              <button class="btn btn-outline btn-sm" data-company-id="${escapeHtml(c.id)}" data-company-name="${escapeHtml(c.name)}">Conectar</button>
             </div>
-          `).join('');
+          `).join(''));
           resultsEl.querySelectorAll('button[data-company-id]').forEach(btn => {
             btn.addEventListener('click', async () => {
               btn.disabled = true;
@@ -115,7 +130,9 @@ export async function renderConnectionsPage(content, pageData) {
             });
           });
         } catch (e) {
-          resultsEl.innerHTML = `Error: ${e.message}`;
+          if (e.name === 'AbortError') return;
+          resultsEl.replaceChildren();
+          resultsEl.insertAdjacentHTML('beforeend', `Error: ${e.message}`);
         }
       }, 400);
     });

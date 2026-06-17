@@ -1,31 +1,41 @@
 import { api } from '../../services/api.js';
 import { formatDate, formatCurrency, formatStatus } from '../../utils/formatters.js';
 import { createPagination } from '../../components/Pagination.js';
-import { openModal, closeModal } from '../../components/Modal.js';
+import Modal, { openModal, closeModal } from '../../components/Modal.js';
 import { showToast } from '../../components/Toast.js';
+import { escapeHtml } from '../../utils/escape.js';
+import { showFieldError } from '../../utils/validators.js';
 
 let paymentItemCounter = 0;
+let paymentsController = null;
+let debtsController = null;
 
 export async function loadPaymentsData(pageData, page = 1, status = '') {
+  if (paymentsController) paymentsController.abort();
+  paymentsController = new AbortController();
   try {
     const params = { page, limit: 20 };
     if (status) params.status = status;
     
-    const result = await api.get('/payments', params);
+    const result = await api.get('/payments', params, { signal: paymentsController.signal });
     pageData.payments = { ...result, page, status };
   } catch (e) {
+    if (e.name === 'AbortError') return;
     pageData.payments = { data: [], meta: { total: 0 }, page, status };
   }
 }
 
 export async function loadDebtsData(pageData, page = 1, status = '') {
+  if (debtsController) debtsController.abort();
+  debtsController = new AbortController();
   try {
     const params = { page, limit: 20 };
     if (status) params.status = status;
     
-    const result = await api.get('/debts', params);
+    const result = await api.get('/debts', params, { signal: debtsController.signal });
     pageData.debts = { ...result, page, status };
   } catch (e) {
+    if (e.name === 'AbortError') return;
     pageData.debts = { data: [], meta: { total: 0 }, page, status };
   }
 }
@@ -34,7 +44,8 @@ export async function renderPaymentsPage(content, pageData) {
   const payments = pageData.payments?.data || [];
   const debts = pageData.debts?.data || [];
   
-  content.innerHTML = `
+  content.replaceChildren();
+  content.insertAdjacentHTML('beforeend', `
     <style>
       .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
       .tab { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
@@ -57,7 +68,7 @@ export async function renderPaymentsPage(content, pageData) {
        <div id="debts-list"></div>
        <div id="debts-pagination"></div>
      </div>
-  `;
+  `);
   
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -72,21 +83,22 @@ export async function renderPaymentsPage(content, pageData) {
   
   const paymentsEl = document.getElementById('payments-list');
   if (payments.length) {
-    paymentsEl.innerHTML = `
+    paymentsEl.replaceChildren();
+    paymentsEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Fecha</th><th>Cliente</th><th>Total</th><th>Estado</th><th>Método</th><th>Acciones</th></tr></thead>
         <tbody>${payments.map(p => `
           <tr>
             <td>${formatDate(p.createdAt)}</td>
-            <td>${p.client?.name || '-'}</td>
+            <td>${escapeHtml(p.client?.name) || '-'}</td>
             <td>${formatCurrency(p.totalAmount)}</td>
             <td><span class="badge badge-${p.status === 'PAID' ? 'success' : p.status === 'PENDING' ? 'warning' : 'danger'}">${formatStatus(p.status, 'payment')}</span></td>
-            <td>${p.method || '-'}</td>
-            <td><button class="btn btn-outline btn-sm" data-id="${p.id}" data-action="view-payment">Ver</button></td>
+            <td>${escapeHtml(p.method) || '-'}</td>
+            <td><button class="btn btn-outline btn-sm" data-id="${escapeHtml(p.id)}" data-action="view-payment">Ver</button></td>
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
     
     paymentsEl.querySelectorAll('[data-action="view-payment"]').forEach(btn => {
       btn.addEventListener('click', () => showPaymentDetail(btn.dataset.id, pageData));
@@ -98,7 +110,7 @@ export async function renderPaymentsPage(content, pageData) {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `recibo-${btn.dataset.id.slice(-6)}.pdf`;
+          a.download = `recibo-${String(btn.dataset.id).padStart(6, '0')}.pdf`;
           a.click();
           URL.revokeObjectURL(url);
         } catch (e) {
@@ -107,7 +119,8 @@ export async function renderPaymentsPage(content, pageData) {
       });
     });
   } else {
-    paymentsEl.innerHTML = '<div class="empty-state"><p>No hay cobros</p></div>';
+    paymentsEl.replaceChildren();
+    paymentsEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay cobros</p></div>');
   }
 
   const paymentsPaginationEl = document.getElementById('payments-pagination');
@@ -126,23 +139,24 @@ export async function renderPaymentsPage(content, pageData) {
   
   const debtsEl = document.getElementById('debts-list');
   if (debts.length) {
-    debtsEl.innerHTML = `
+    debtsEl.replaceChildren();
+    debtsEl.insertAdjacentHTML('beforeend', `
       <table class="data-table">
         <thead><tr><th>Cliente</th><th>Monto</th><th>Vencimiento</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody>${debts.map(d => `
           <tr>
-            <td>${d.client?.name || '-'}</td>
+            <td>${escapeHtml(d.client?.name) || '-'}</td>
             <td>${formatCurrency(d.amount)}</td>
             <td>${formatDate(d.dueDate)}</td>
             <td><span class="badge badge-${d.status === 'PAID' ? 'success' : d.status === 'OVERDUE' ? 'danger' : 'warning'}">${formatStatus(d.status, 'debt')}</span></td>
             <td>
-              ${d.status !== 'PAID' ? `<button class="btn btn-outline btn-sm" data-id="${d.id}" data-action="pay-debt">Pagar</button>` : ''}
-              ${d.status !== 'PAID' && d.status !== 'CANCELLED' ? `<button class="btn btn-outline btn-sm" data-id="${d.id}" data-action="cancel-debt">Cancelar</button>` : ''}
+              ${d.status !== 'PAID' ? `<button class="btn btn-outline btn-sm" data-id="${escapeHtml(d.id)}" data-action="pay-debt">Pagar</button>` : ''}
+              ${d.status !== 'PAID' && d.status !== 'CANCELLED' ? `<button class="btn btn-outline btn-sm" data-id="${escapeHtml(d.id)}" data-action="cancel-debt">Cancelar</button>` : ''}
             </td>
           </tr>
         `).join('')}</tbody>
       </table>
-    `;
+    `);
     
     debtsEl.querySelectorAll('[data-action="pay-debt"]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -159,7 +173,7 @@ export async function renderPaymentsPage(content, pageData) {
     
     debtsEl.querySelectorAll('[data-action="cancel-debt"]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!window.confirm('¿Cancelar esta deuda?')) return;
+        if (!(await Modal.confirm('¿Cancelar esta deuda?'))) return;
         try {
           await api.patch(`/debts/${btn.dataset.id}/cancel`);
           showToast('Deuda cancelada', 'success');
@@ -171,7 +185,8 @@ export async function renderPaymentsPage(content, pageData) {
       });
     });
   } else {
-    debtsEl.innerHTML = '<div class="empty-state"><p>No hay deudas</p></div>';
+    debtsEl.replaceChildren();
+    debtsEl.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>No hay deudas</p></div>');
   }
 }
 
@@ -272,7 +287,7 @@ export function showAddPaymentModal(pageData) {
       if (clientId === '__new__') {
         const name = document.getElementById('quick-client-name').value.trim();
         if (!name) {
-          showToast('El nombre del cliente es requerido', 'error');
+          showFieldError('quick-client-name', 'El nombre del cliente es requerido');
           return false;
         }
         try {
@@ -335,8 +350,9 @@ export function showAddPaymentModal(pageData) {
     const sel = document.getElementById('pay-clientId');
     if (!sel) return;
     const options = '<option value="">Seleccionar...</option><option value="__new__">+ Crear cliente ocasional</option>' +
-      clientsCache.map(c => `<option value="${c.id}">${c.name} ${c.lastName || ''}</option>`).join('');
-    sel.innerHTML = options;
+      clientsCache.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} ${escapeHtml(c.lastName) || ''}</option>`).join('');
+    sel.replaceChildren();
+    sel.insertAdjacentHTML('beforeend', options);
   }
   
   document.getElementById('pay-clientId')?.addEventListener('change', (e) => {
@@ -346,10 +362,11 @@ export function showAddPaymentModal(pageData) {
     
     const petSel = document.getElementById('pay-petId');
     if (!petSel) return;
-    petSel.innerHTML = '<option value="">Seleccionar...</option>';
+    petSel.replaceChildren();
+    petSel.insertAdjacentHTML('beforeend', '<option value="">Seleccionar...</option>');
     if (val && val !== '__new__') {
       api.get(`/clients/${val}/pets`).then(pets => {
-        if (pets.length) pets.forEach(p => petSel.innerHTML += `<option value="${p.id}">${p.name}</option>`);
+        if (pets.length) pets.forEach(p => petSel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`));
       }).catch(() => {});
     }
   });
@@ -366,7 +383,8 @@ export function showAddPaymentModal(pageData) {
     const div = document.createElement('div');
     div.className = 'payment-item-row';
     div.style.position = 'relative';
-    div.innerHTML = `
+    div.replaceChildren();
+    div.insertAdjacentHTML('beforeend', `
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div style="flex:3;min-width:180px;position:relative">
           <input class="form-input pay-item-desc" placeholder="Buscar insumo o describir..." autocomplete="off" style="width:100%">
@@ -377,7 +395,7 @@ export function showAddPaymentModal(pageData) {
         <span class="pay-item-subtotal" style="width:80px;font-weight:600">$0.00</span>
         <button type="button" class="btn btn-danger btn-sm remove-pay-item">X</button>
       </div>
-    `;
+    `);
     container.appendChild(div);
     
     const descInput = div.querySelector('.pay-item-desc');
@@ -392,12 +410,13 @@ export function showAddPaymentModal(pageData) {
         s.name.toLowerCase().includes(q) || (s.brand && s.brand.toLowerCase().includes(q))
       ).slice(0, 10);
       if (!matches.length) { dropdown.style.display = 'none'; return; }
-      dropdown.innerHTML = matches.map(s => 
-        `<div class="supply-option" data-id="${s.id}" data-name="${s.name}" data-price="${s.salePrice || s.unitPrice || 0}">
-          <span>${s.name}${s.brand ? ' - ' + s.brand : ''}</span>
+      dropdown.replaceChildren();
+      dropdown.insertAdjacentHTML('beforeend', matches.map(s => 
+        `<div class="supply-option" data-id="${escapeHtml(s.id)}" data-name="${escapeHtml(s.name)}" data-price="${escapeHtml(s.salePrice || s.unitPrice || 0)}">
+          <span>${escapeHtml(s.name)}${s.brand ? ' - ' + escapeHtml(s.brand) : ''}</span>
           <span>${formatCurrency(s.salePrice || s.unitPrice || 0)}</span>
         </div>`
-      ).join('');
+      ).join(''));
       dropdown.style.display = 'block';
       dropdown.querySelectorAll('.supply-option').forEach(opt => {
         opt.addEventListener('click', () => {
@@ -481,7 +500,7 @@ export async function showPaymentDetail(paymentId, pageData) {
     <h4 style="margin:16px 0 8px;font-size:var(--text-sm)">Items</h4>
     <table class="data-table" style="font-size:var(--text-xs)">
       <thead><tr><th>Descripción</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr></thead>
-      <tbody>${payment.items.map(i => `<tr><td>${i.description}</td><td>${i.quantity}</td><td>${formatCurrency(i.unitPrice)}</td><td>${formatCurrency(i.totalPrice)}</td></tr>`).join('')}</tbody>
+      <tbody>${payment.items.map(i => `<tr><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.quantity)}</td><td>${formatCurrency(i.unitPrice)}</td><td>${formatCurrency(i.totalPrice)}</td></tr>`).join('')}</tbody>
     </table>
   ` : '';
   
@@ -492,16 +511,16 @@ export async function showPaymentDetail(paymentId, pageData) {
   const deleteHTML = `<button class="btn btn-outline btn-sm" id="pay-delete-btn" style="color:var(--color-danger);border-color:var(--color-danger)">Eliminar cobro</button>`;
   
   openModal({
-    title: `Cobro ${payment.id.slice(-8).toUpperCase()}`,
+    title: `Cobro #${escapeHtml(String(payment.id).padStart(6, '0'))}`,
     size: 'medium',
     content: `
       <div class="detail-row"><span>Fecha</span><span>${formatDate(payment.createdAt)}</span></div>
-      <div class="detail-row"><span>Cliente</span><span>${payment.client?.name || 'Sin cliente'}</span></div>
-      <div class="detail-row"><span>Mascota</span><span>${payment.pet?.name || '-'}</span></div>
-      <div class="detail-row"><span>Método</span><span>${methodLabels[method] || method || '-'}</span></div>
+      <div class="detail-row"><span>Cliente</span><span>${escapeHtml(payment.client?.name) || 'Sin cliente'}</span></div>
+      <div class="detail-row"><span>Mascota</span><span>${escapeHtml(payment.pet?.name) || '-'}</span></div>
+      <div class="detail-row"><span>Método</span><span>${methodLabels[method] || escapeHtml(method) || '-'}</span></div>
       <div class="detail-row"><span>Estado</span><span class="badge badge-${payment.status === 'PAID' ? 'success' : 'warning'}">${formatStatus(payment.status, 'payment')}</span></div>
       <div class="detail-row"><span>Total</span><span style="font-size:var(--text-xl);font-weight:700">${formatCurrency(payment.totalAmount)}</span></div>
-      ${payment.notes ? `<div class="detail-row"><span>Notas</span><span>${payment.notes}</span></div>` : ''}
+      ${payment.notes ? `<div class="detail-row"><span>Notas</span><span>${escapeHtml(payment.notes)}</span></div>` : ''}
       ${itemsHTML}
       ${actionsHTML ? `<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px">${actionsHTML}</div>` : ''}
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
@@ -568,7 +587,7 @@ export async function showPaymentDetail(paymentId, pageData) {
     });
     
     document.getElementById('pay-delete-btn')?.addEventListener('click', async () => {
-      if (!window.confirm('¿Estás seguro de eliminar este cobro? Se aplicará como eliminación lógica.')) return;
+      if (!(await Modal.confirm('¿Estás seguro de eliminar este cobro? Se aplicará como eliminación lógica.'))) return;
       try {
         await api.delete(`/payments/${paymentId}`);
         showToast('Cobro eliminado', 'success');
@@ -666,20 +685,21 @@ export function showQRModal(paymentId) {
     function regenQR() {
       const container = document.getElementById('qr-image-container');
       const countdown = document.getElementById('qr-countdown');
-      if (container) container.innerHTML = '<div style="padding:40px;color:var(--text-secondary)">Regenerando QR...</div>';
+      if (container) { container.replaceChildren(); container.insertAdjacentHTML('beforeend', '<div style="padding:40px;color:var(--text-secondary)">Regenerando QR...</div>'); }
       
       timerTimeout = setTimeout(async () => {
         try {
           const result = await api.post('/mercadopago/qr', { paymentId });
           if (container) {
-            container.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(result.qrData)}" style="border:2px solid var(--border);border-radius:var(--radius)">`;
+            container.replaceChildren();
+            container.insertAdjacentHTML('beforeend', `<img src="https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(result.qrData)}" style="border:2px solid var(--border);border-radius:var(--radius)">`);
           }
           seconds = 120;
           if (countdown) countdown.style.display = '';
           countdownInterval = setInterval(updateCountdown, 1000);
           updateCountdown();
         } catch (e) {
-          if (container) container.innerHTML = '<div style="padding:40px;color:var(--color-danger)">Error regenerando QR</div>';
+          if (container) { container.replaceChildren(); container.insertAdjacentHTML('beforeend', '<div style="padding:40px;color:var(--color-danger)">Error regenerando QR</div>'); }
         }
       }, 1500);
     }

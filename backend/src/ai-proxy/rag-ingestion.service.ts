@@ -13,7 +13,7 @@ export class RagIngestionService {
     private aiProxy: AiProxyService,
   ) {}
 
-  async ingestCompanyData(companyId: string, progressCallback?: ProgressCallback) {
+  async ingestCompanyData(companyId: number, progressCallback?: ProgressCallback) {
     const results = {
       clients: 0,
       pets: 0,
@@ -141,7 +141,7 @@ export class RagIngestionService {
           const clientName = pay.client ? `${pay.client.name} ${pay.client.lastName || ''}`.trim() : 'N/A';
           const petName = pay.pet?.name || 'N/A';
           const itemsList = pay.items.map(i => `${i.description} x${i.quantity} $${i.totalPrice}`).join(', ');
-          const statusLabel = { PENDING: 'Pendiente', PAID: 'Pagado', CANCELLED: 'Cancelado', OVERDUE: 'Vencido' }[pay.status] || pay.status;
+          const statusLabel = { PENDING: 'Pendiente', PAID: 'Pagado', CANCELLED: 'Cancelado', OVERDUE: 'Vencido', DEFERRED: 'Diferido', PARTIAL: 'Parcial' }[pay.status] || pay.status;
           allDocs.push({
             content: `Cobro/Pago: cliente ${clientName}, mascota ${petName}. Total: $${pay.totalAmount}. Estado: ${statusLabel}. Método: ${pay.method || 'N/A'}. Fecha: ${pay.createdAt.toISOString().split('T')[0]}. Items: ${itemsList || 'Sin detalle'}.`,
             metadata: { source: 'payment', paymentId: pay.id, clientId: pay.clientId, petId: pay.petId }

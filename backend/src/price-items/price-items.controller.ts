@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { ParseHashIdPipe } from '../common/pipes/parse-hash-id.pipe';
 
 @ApiTags('price-items') 
 @ApiBearerAuth() 
@@ -49,12 +50,12 @@ export class PriceItemsController {
   }
 
   @Patch(':id') 
-  update(@Param('id') id: string, @Body() d: any, @CurrentUser() u: any) { 
+  update(@Param('id', ParseHashIdPipe) id: number, @Body() d: any, @CurrentUser() u: any) { 
     return this.s.update(id, u.companyId, d); 
   }
 
   @Delete(':id') 
-  remove(@Param('id') id: string, @CurrentUser() u: any) { 
+  remove(@Param('id', ParseHashIdPipe) id: number, @CurrentUser() u: any) { 
     return this.s.remove(id, u.companyId); 
   }
 }

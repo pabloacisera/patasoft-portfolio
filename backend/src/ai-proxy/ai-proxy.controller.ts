@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Get, UseGuards, UseInterceptors, UploadedFile, Param, Inject, forwardRef, Res, Sse } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, UseInterceptors, UploadedFile, Param, Inject, forwardRef, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { Readable } from 'stream';
 import { AiProxyService } from './ai-proxy.service';
 import { DocumentProcessorService } from '../queues/document-processor.service';
 import { RagIngestionService } from './rag-ingestion.service';
@@ -9,11 +10,10 @@ import { ChatDto, TranscribeDto } from './dto/ai-proxy.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BadRequestException } from '@nestjs/common';
-import { Observable } from 'rxjs';
 
 interface RequestUser {
-  companyId: string;
-  id: string;
+  companyId: number;
+  id: number;
   email: string;
   [key: string]: string | number | boolean | unknown;
 }
@@ -25,6 +25,7 @@ interface RequestUser {
 export class AiProxyController {
   constructor(
     private readonly aiProxyService: AiProxyService,
+    // forwardRef necesario: dependencia circular AiProxyController -> DocumentProcessorService (QueuesModule)
     @Inject(forwardRef(() => DocumentProcessorService))
     private readonly documentProcessor: DocumentProcessorService,
     private readonly ragIngestionService: RagIngestionService,
@@ -47,10 +48,11 @@ export class AiProxyController {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
 
     try {
-      if (this.aiProxyService['scaleMode'] !== 'PRO') {
-        const localRag = this.aiProxyService['localRagService'];
+      if (this.aiProxyService.getScaleMode() !== 'PRO') {
+        const localRag = this.aiProxyService.getLocalRagService();
         if (!localRag) {
           res.write(`data: ${JSON.stringify({ error: 'Servicio de IA local no disponible' })}\n\n`);
           res.end();
@@ -66,13 +68,17 @@ export class AiProxyController {
         return;
       }
 
-      const result = await this.aiProxyService.chat(user.companyId, dto);
-      res.write(`data: ${JSON.stringify({ content: result.message?.content || result.response })}\n\n`);
-      res.write(`data: ${JSON.stringify({ done: true, full: result.message?.content || result.response })}\n\n`);
-      res.end();
+      const upstream = await this.aiProxyService.chatStream(user.companyId, dto);
+      if (!upstream.body) {
+        res.write(`data: ${JSON.stringify({ error: 'Servicio de IA sin stream disponible' })}\n\n`);
+        res.end();
+        return;
+      }
+
+      Readable.fromWeb(upstream.body as any).pipe(res);
     } catch (error) {
       res.status(500);
-      res.write(`data: ${JSON.stringify({ error: error.message || 'Error en el servicio de IA' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ error: 'Error en el servicio de IA' })}\n\n`);
       res.end();
     }
   }
@@ -93,7 +99,7 @@ export class AiProxyController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadRagDocument(
     @UploadedFile() file: Express.Multer.File,
-    @Body('companyId') companyId: string,
+    @Body('companyId') companyId: number,
   ) {
     if (!file) {
       throw new BadRequestException('No se proporcionó ningún archivo');
@@ -104,7 +110,7 @@ export class AiProxyController {
     
     if (isExcel) {
       const jobId = await this.documentProcessor.enqueueDocument({
-        companyId,
+        companyId: +companyId,
         fileName: file.originalname,
         fileBuffer: file.buffer,
         mimeType: file.mimetype,
@@ -116,7 +122,7 @@ export class AiProxyController {
       };
     }
 
-    return this.aiProxyService.uploadRag(companyId, file);
+    return this.aiProxyService.uploadRag(+companyId, file);
   }
 
   @Post('rag/sync')
@@ -150,7 +156,7 @@ export class AiProxyController {
       res.end();
 
     } catch (error) {
-      send({ type: 'error', message: `Error: ${error.message}` });
+      send({ type: 'error', message: 'Error en el servicio de IA' });
       res.status(500);
       res.end();
     }

@@ -3,6 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { DebtsService } from '../debts/debts.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
+
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
@@ -24,5 +26,17 @@ export class CronService {
     this.logger.log('Ejecutando proceso de expiración de suscripciones...');
     await this.subService.checkExpirations();
     this.logger.log('Proceso de expiración de suscripciones completado');
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async keepAlive() {
+    try {
+      const res = await fetch(`${SELF_URL}/health`, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) {
+        this.logger.warn(`Keep-alive responded with ${res.status}`);
+      }
+    } catch (e) {
+      this.logger.warn(`Keep-alive falló: ${e.message}`);
+    }
   }
 }

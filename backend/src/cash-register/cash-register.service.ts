@@ -9,7 +9,7 @@ export class CashRegisterService {
 
   constructor(private prisma: PrismaService) {}
 
-  async findAll(companyId: string, q: CashSummaryQueryDto = {}) {
+  async findAll(companyId: number, q: CashSummaryQueryDto = {}) {
     const { date, startDate, endDate, page = 1, limit = 20, search, type } = q;
     const where: any = { companyId };
 
@@ -17,9 +17,9 @@ export class CashRegisterService {
       const d = new Date(date);
       const nextDay = new Date(d);
       nextDay.setDate(d.getDate() + 1);
-      where.date = { gte: d, lt: nextDay };
+      where.createdAt = { gte: d, lt: nextDay };
     } else if (startDate || endDate) {
-      where.date = {
+      where.createdAt = {
         ...(startDate && { gte: new Date(startDate) }),
         ...(endDate && { lte: new Date(endDate) }),
       };
@@ -40,7 +40,7 @@ export class CashRegisterService {
     const [movements, total] = await Promise.all([
       this.prisma.cashMovement.findMany({
         where,
-        orderBy: { date: 'desc' },
+        orderBy: { createdAt: 'desc' },
         include: { payment: true },
         skip,
         take: limitNum,
@@ -59,7 +59,7 @@ export class CashRegisterService {
     };
   }
 
-  async getSummary(companyId: string, q: CashSummaryQueryDto = {}) {
+  async getSummary(companyId: number, q: CashSummaryQueryDto = {}) {
     const { date, startDate, endDate } = q;
     const where: any = { companyId };
 
@@ -67,9 +67,9 @@ export class CashRegisterService {
       const d = new Date(date);
       const nextDay = new Date(d);
       nextDay.setDate(d.getDate() + 1);
-      where.date = { gte: d, lt: nextDay };
+      where.createdAt = { gte: d, lt: nextDay };
     } else if (startDate || endDate) {
-      where.date = {
+      where.createdAt = {
         ...(startDate && { gte: new Date(startDate) }),
         ...(endDate && { lte: new Date(endDate) }),
       };
@@ -96,7 +96,7 @@ export class CashRegisterService {
     };
   }
 
-  async create(companyId: string, dto: CreateCashMovementDto, userId?: string) {
+  async create(companyId: number, dto: CreateCashMovementDto, userId?: number) {
     const movement = await this.prisma.cashMovement.create({
       data: {
         companyId,
@@ -105,7 +105,6 @@ export class CashRegisterService {
         reason: dto.reason,
         paymentId: dto.paymentId,
         createdBy: userId,
-        date: new Date(),
       },
       include: { payment: true },
     });
@@ -114,7 +113,7 @@ export class CashRegisterService {
     return movement;
   }
 
-  async createFromPayment(companyId: string, paymentId: string, amount: number) {
+  async createFromPayment(companyId: number, paymentId: number, amount: number) {
     return this.create(companyId, {
       type: CashMovementType.INCOME,
       amount,
@@ -123,7 +122,19 @@ export class CashRegisterService {
     });
   }
 
-  async update(companyId: string, id: string, dto: UpdateCashMovementDto) {
+  async reverseFromPayment(companyId: number, paymentId: number, tx?: any) {
+    const prisma = tx || this.prisma;
+    const movement = await prisma.cashMovement.findFirst({
+      where: { paymentId, companyId }
+    });
+    if (!movement) return null;
+
+    await prisma.cashMovement.delete({ where: { id: movement.id } });
+    this.logger.log(`Movimiento de caja revertido para pago: ${paymentId}`);
+    return movement;
+  }
+
+  async update(companyId: number, id: number, dto: UpdateCashMovementDto) {
     const movement = await this.prisma.cashMovement.findFirst({ where: { id, companyId } });
     if (!movement) throw new NotFoundException('Movimiento no encontrado');
     if (movement.paymentId) throw new BadRequestException('No se puede editar un movimiento vinculado a un pago');
@@ -136,7 +147,7 @@ export class CashRegisterService {
     });
   }
 
-  async remove(companyId: string, id: string) {
+  async remove(companyId: number, id: number) {
     const movement = await this.prisma.cashMovement.findFirst({ where: { id, companyId } });
     if (!movement) throw new NotFoundException('Movimiento no encontrado');
     if (movement.paymentId) throw new BadRequestException('No se puede eliminar un movimiento vinculado a un pago');

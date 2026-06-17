@@ -14,6 +14,7 @@ function createContainer() {
     container = document.createElement('div');
     container.id = 'toast-container';
     container.className = 'toast-container';
+    container.setAttribute('aria-live', 'polite');
     document.body.appendChild(container);
   }
   
@@ -51,7 +52,8 @@ function show(options) {
   if (dismissable) {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'toast-close';
-    closeBtn.innerHTML = '&times;';
+    closeBtn.replaceChildren();
+    closeBtn.insertAdjacentHTML('beforeend', '&times;');
     closeBtn.addEventListener('click', () => hide(toast));
     toast.appendChild(closeBtn);
   }

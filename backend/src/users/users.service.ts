@@ -8,7 +8,7 @@ export class UsersService {
 
   constructor(private prisma: PrismaService) {}
 
-  async findAll(companyId: string, query: UserQueryDto) {
+  async findAll(companyId: number, query: UserQueryDto) {
     const page = parseInt(query.page || '1');
     const limit = parseInt(query.limit || '10');
     const skip = (page - 1) * limit;
@@ -52,7 +52,7 @@ export class UsersService {
     };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -74,7 +74,7 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, companyId: string, dto: UpdateUserDto) {
+  async update(id: number, companyId: number, dto: UpdateUserDto) {
     const user = await this.findOne(id, companyId);
 
     const updatedUser = await this.prisma.user.update({
@@ -95,7 +95,7 @@ export class UsersService {
     return updatedUser;
   }
 
-  async deactivate(id: string, companyId: string) {
+  async deactivate(id: number, companyId: number) {
     const user = await this.findOne(id, companyId);
     
     // No permitir que un usuario se desactive a sí mismo si es el único ADMIN_COMPANY (opcional, lógica simple por ahora)

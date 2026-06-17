@@ -12,7 +12,7 @@ export class SupplyPurchasesService {
     private cashService: CashRegisterService,
   ) {}
 
-  async findAll(companyId: string, q: any = {}) {
+  async findAll(companyId: number, q: any = {}) {
     const { page = 1, limit = 20 } = q;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -33,7 +33,7 @@ export class SupplyPurchasesService {
     };
   }
 
-  async create(companyId: string, dto: any) {
+  async create(companyId: number, dto: any) {
     const supply = await this.prisma.supply.findFirst({
       where: { id: dto.supplyId, companyId },
     });
@@ -80,7 +80,7 @@ export class SupplyPurchasesService {
     return result;
   }
 
-  async exportExcel(companyId: string) {
+  async exportExcel(companyId: number) {
     const purchases = await this.prisma.supplyPurchase.findMany({
       where: { companyId },
       orderBy: { purchasedAt: 'desc' },

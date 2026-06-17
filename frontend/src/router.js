@@ -22,7 +22,7 @@ export const router = {
       return this.handle(path);
     }
 
-    app.innerHTML = '';
+    app.replaceChildren();
     await route.render();
   },
 

@@ -9,6 +9,7 @@ describe('MedicalRecordsService', () => {
   let mockRag: any;
   let mockCashService: any;
   let mockDocumentProcessor: any;
+  let mockSuppliesService: any;
 
   const companyId = 'company-1';
 
@@ -33,11 +34,13 @@ describe('MedicalRecordsService', () => {
       },
       priceItem: {
         findUnique: vi.fn().mockResolvedValue(null),
+        count: vi.fn().mockResolvedValue(10), // Default: price items exist
       },
       supply: {
         findUnique: vi.fn().mockResolvedValue(null),
         findFirst: vi.fn().mockResolvedValue(null),
         update: vi.fn(),
+        count: vi.fn().mockResolvedValue(10), // Default: supplies exist
       },
       procedure: {
         create: vi.fn(),
@@ -70,7 +73,10 @@ describe('MedicalRecordsService', () => {
     mockDocumentProcessor = {
       enqueuePdfJob: vi.fn().mockResolvedValue('job-id'),
     };
-    service = new MedicalRecordsService(mockPrisma, mockPdfService, mockRag, mockCashService, mockDocumentProcessor);
+    mockSuppliesService = {
+      deductStock: vi.fn().mockResolvedValue(undefined),
+    };
+    service = new MedicalRecordsService(mockPrisma, mockPdfService, mockRag, mockCashService, mockDocumentProcessor, mockSuppliesService);
   });
 
   describe('findAll', () => {
@@ -242,15 +248,11 @@ describe('MedicalRecordsService', () => {
       mockPrisma.supply.findUnique.mockResolvedValue({ id: 'sup-1', salePrice: 500, unitsPerStock: 1 });
       mockPrisma._tx.medicalRecord.create.mockResolvedValue({ id: 'rec-1', procedures: [], prescriptions: [] });
       mockPrisma._tx.supply.findUnique.mockResolvedValue({ id: 'sup-1', quantity: 10 });
-      mockPrisma._tx.supply.update.mockResolvedValue({});
       mockPrisma._tx.payment.create.mockResolvedValue({ id: 'pay-1', totalAmount: 1500, items: [] });
 
       await service.create(companyId, dto);
 
-      expect(mockPrisma._tx.supply.update).toHaveBeenCalledWith({
-        where: { id: 'sup-1' },
-        data: { quantity: { decrement: 3 } },
-      });
+      expect(mockSuppliesService.deductStock).toHaveBeenCalledWith(companyId, 'sup-1', 3, mockPrisma._tx);
     });
 
     it('should discount stock for prescriptions soldInClinic', async () => {
@@ -264,15 +266,11 @@ describe('MedicalRecordsService', () => {
       mockPrisma.supply.findUnique.mockResolvedValue({ id: 'sup-1', salePrice: 800, unitsPerStock: 1 });
       mockPrisma._tx.medicalRecord.create.mockResolvedValue({ id: 'rec-1', procedures: [], prescriptions: [] });
       mockPrisma._tx.supply.findUnique.mockResolvedValue({ id: 'sup-1', quantity: 10 });
-      mockPrisma._tx.supply.update.mockResolvedValue({});
       mockPrisma._tx.payment.create.mockResolvedValue({ id: 'pay-1', totalAmount: 1600, items: [] });
 
       await service.create(companyId, dto);
 
-      expect(mockPrisma._tx.supply.update).toHaveBeenCalledWith({
-        where: { id: 'sup-1' },
-        data: { quantity: { decrement: 2 } },
-      });
+      expect(mockSuppliesService.deductStock).toHaveBeenCalledWith(companyId, 'sup-1', 2, mockPrisma._tx);
     });
 
     it('should create cash movement for CASH payment', async () => {
@@ -390,16 +388,11 @@ describe('MedicalRecordsService', () => {
       mockPrisma.pet.findMany.mockResolvedValue([{ id: 'pet-1' }]);
       mockPrisma.medicalRecord.findFirst.mockResolvedValue(record);
       mockPrisma.procedure.create.mockResolvedValue({ id: 'proc-1', name: 'Vacuna' });
-      mockPrisma.supply.findFirst.mockResolvedValue({ id: 'sup-1', name: 'Vacuna', quantity: 10 });
-      mockPrisma.supply.update.mockResolvedValue({});
 
       await service.addProcedure('rec-1', companyId, { name: 'Vacuna', supplyId: 'sup-1', quantity: 2 });
 
       expect(mockPrisma.procedure.create).toHaveBeenCalled();
-      expect(mockPrisma.supply.update).toHaveBeenCalledWith({
-        where: { id: 'sup-1' },
-        data: { quantity: 8 },
-      });
+      expect(mockSuppliesService.deductStock).toHaveBeenCalledWith(companyId, 'sup-1', 2);
     });
   });
 

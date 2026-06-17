@@ -1,6 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
-import { BullModule } from '@nestjs/bull';
 import { ConfigModule } from '@nestjs/config';
 import { AiProxyService } from './ai-proxy.service';
 import { AiProxyController } from './ai-proxy.controller';
@@ -11,11 +10,9 @@ import { QueuesModule } from '../queues/queues.module';
 @Module({
   imports: [
     ConfigModule,
+    // forwardRef necesario: dependencia circular AiProxyModule <-> QueuesModule
     forwardRef(() => QueuesModule),
     MulterModule.register({ dest: '/tmp' }),
-    BullModule.registerQueue({
-      name: 'document-processing',
-    }),
   ],
   controllers: [AiProxyController],
   providers: [AiProxyService, RagIngestionService, LocalRagService],

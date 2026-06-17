@@ -6,6 +6,7 @@ import { MercadopagoService } from '../mercadopago/mercadopago.service';
 import { PdfService } from '../documents/pdf.service';
 import { CashRegisterService } from '../cash-register/cash-register.service';
 import { DocumentProcessorService } from '../queues/document-processor.service';
+import { SuppliesService } from '../supplies/supplies.service';
 
 @Injectable()
 export class PaymentsService {
@@ -17,9 +18,10 @@ export class PaymentsService {
     private pdfService: PdfService,
     private cashService: CashRegisterService,
     private documentProcessor: DocumentProcessorService,
+    private suppliesService: SuppliesService,
   ) {}
 
-  async findAll(companyId: string, q: any = {}) {
+  async findAll(companyId: number, q: any = {}) {
     const { page = 1, limit = 20, status, clientId } = q;
     const skip = (Number(page) - 1) * Number(limit);
     const where: any = { 
@@ -50,7 +52,7 @@ export class PaymentsService {
     };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const payment = await this.prisma.payment.findFirst({
       where: { id, companyId, isDeleted: false },
       include: {
@@ -65,7 +67,7 @@ export class PaymentsService {
     return payment;
   }
 
-  async create(companyId: string, dto: CreatePaymentDto) {
+  async create(companyId: number, dto: CreatePaymentDto) {
     const items = dto.items?.map(i => ({ 
       description: i.description, 
       quantity: i.quantity, 
@@ -74,63 +76,60 @@ export class PaymentsService {
       itemType: i.itemType || 'SUPPLY',
     })) || [];
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        companyId, 
-        clientId: dto.clientId, 
-        petId: dto.petId, 
-        medicalRecordId: dto.medicalRecordId,
-        totalAmount: dto.totalAmount, 
-        status: (dto.status as PaymentStatus) || 'PENDING', 
-        method: (dto.method as PaymentMethod),
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined, 
-        notes: dto.notes,
-        items: { create: items },
-      },
-      include: { items: true },
-    });
-    this.logger.log(`Pago creado: ${payment.id}`);
-
-    // Descontar stock de items con supplyId
-    for (const item of dto.items || []) {
-      if (!item.supplyId) continue;
-      const supply = await this.prisma.supply.findUnique({ where: { id: item.supplyId } });
-      if (!supply) continue;
-      const qty = item.quantity || 1;
-      const stockUnitsUsed = supply.unitsPerStock ? Math.ceil(qty / supply.unitsPerStock) : qty;
-      await this.prisma.supply.update({
-        where: { id: item.supplyId },
-        data: { quantity: { decrement: stockUnitsUsed } },
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.payment.create({
+        data: {
+          companyId, 
+          clientId: dto.clientId, 
+          petId: dto.petId, 
+          medicalRecordId: dto.medicalRecordId,
+          totalAmount: dto.totalAmount, 
+          status: (dto.status as PaymentStatus) || 'PENDING', 
+          method: (dto.method as PaymentMethod),
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined, 
+          notes: dto.notes,
+          items: { create: items },
+        },
+        include: { items: true },
       });
-      this.logger.log(`Stock descontado: ${supply.name} -${stockUnitsUsed}`);
-    }
+
+      // Descontar stock de items con supplyId
+      for (const item of dto.items || []) {
+        if (!item.supplyId) continue;
+        await this.suppliesService.deductStock(companyId, item.supplyId, item.quantity || 1, tx);
+      }
+
+      // Crear deuda si corresponde
+      if (dto.clientId && dto.dueDate) {
+        const isDeferred = created.status === 'DEFERRED';
+        const isUnconfirmedMethod = dto.method ? ['MP_QR', 'MP_CHECKOUT', 'TRANSFER', 'CHECK'].includes(dto.method) : false;
+        
+        if (isDeferred || isUnconfirmedMethod) {
+          await tx.debt.create({
+            data: {
+              companyId,
+              clientId: dto.clientId,
+              paymentId: created.id,
+              amount: created.totalAmount,
+              dueDate: new Date(dto.dueDate),
+              notes: dto.notes,
+              interestRate: dto.interestRate || null,
+              originalAmount: created.totalAmount,
+            }
+          });
+          this.logger.log(`Deuda creada automáticamente para pago: ${created.id}`);
+        }
+      }
+
+      return created;
+    });
+
+    this.logger.log(`Pago creado: ${payment.id}`);
 
     if (dto.method === 'CASH' && payment.status === 'PAID') {
       await this.cashService.createFromPayment(companyId, payment.id, payment.totalAmount);
     }
 
-    if (dto.clientId && dto.dueDate) {
-      const isDeferred = payment.status === 'DEFERRED';
-      const isUnconfirmedMethod = ['MP_QR', 'MP_CHECKOUT', 'TRANSFER', 'CHECK'].includes(dto.method);
-      
-      if (isDeferred || isUnconfirmedMethod) {
-        await this.prisma.debt.create({
-          data: {
-            companyId,
-            clientId: dto.clientId,
-            paymentId: payment.id,
-            amount: payment.totalAmount,
-            dueDate: new Date(dto.dueDate),
-            notes: dto.notes,
-            interestRate: dto.interestRate || null,
-            originalAmount: payment.totalAmount,
-          }
-        });
-        this.logger.log(`Deuda creada automáticamente para pago: ${payment.id}`);
-      }
-    }
-
-    // Generar comprobante si el pago ya está cobrado
     if (payment.status === 'PAID' && !payment.cloudinaryUrl) {
       this.documentProcessor.enqueuePdfJob({ companyId, pdfType: 'receipt', paymentId: payment.id }).catch(e =>
         this.logger.error('Error encolando PDF comprobante', e)
@@ -140,7 +139,7 @@ export class PaymentsService {
     return payment;
   }
 
-  async update(id: string, companyId: string, dto: UpdatePaymentDto) {
+  async update(id: number, companyId: number, dto: UpdatePaymentDto) {
     const payment = await this.findOne(id, companyId);
 
     // Validar que no se pueda marcar como PAID un pago electrónico sin MP configurado
@@ -214,7 +213,7 @@ export class PaymentsService {
     return updated;
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: number, companyId: number) {
     await this.findOne(id, companyId);
     return this.prisma.payment.update({
       where: { id },
@@ -222,12 +221,12 @@ export class PaymentsService {
     });
   }
 
-  async generateCheckoutLink(id: string, companyId: string) {
+  async generateCheckoutLink(id: number, companyId: number) {
     await this.findOne(id, companyId);
     return this.mpService.createPreference(companyId, { paymentId: id });
   }
 
-  async generateReceipt(id: string, companyId: string) {
+  async generateReceipt(id: number, companyId: number) {
     return this.pdfService.generateReceipt(id, companyId);
   }
 

@@ -11,7 +11,7 @@ export default defineConfig({
     hookTimeout: 30000,
     env: {
       NODE_ENV: 'test',
-      DATABASE_URL: 'postgresql://patasoft:patasoft_dev@localhost:5432/patasoft_test',
+      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/db',
     },
   },
 });

@@ -14,7 +14,7 @@ export class PetsService {
     private rag: LocalRagService,
   ) {}
 
-  async findAll(companyId: string, pagination: { page?: number; limit?: number; search?: string; species?: string } = {}) {
+  async findAll(companyId: number, pagination: { page?: number; limit?: number; search?: string; species?: string } = {}) {
     const page = Number(pagination.page) || 1;
     const limit = Number(pagination.limit) || 20;
     const search = pagination.search;
@@ -47,7 +47,7 @@ export class PetsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: number, companyId: number) {
     const pet = await this.prisma.pet.findFirst({
       where: { id, companyId },
       include: {
@@ -62,7 +62,7 @@ export class PetsService {
     return pet;
   }
 
-  async create(companyId: string, dto: CreatePetDto) {
+  async create(companyId: number, dto: CreatePetDto) {
     if (dto.clientId) {
       const client = await this.prisma.client.findFirst({
         where: { id: dto.clientId, companyId },
@@ -103,7 +103,7 @@ export class PetsService {
     return pet;
   }
 
-  async update(id: string, companyId: string, dto: UpdatePetDto) {
+  async update(id: number, companyId: number, dto: UpdatePetDto) {
     await this.findOne(id, companyId);
 
     const pet = await this.prisma.pet.update({
@@ -138,7 +138,7 @@ export class PetsService {
     return pet;
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: number, companyId: number) {
     await this.findOne(id, companyId);
 
     await this.prisma.pet.update({
@@ -149,7 +149,7 @@ export class PetsService {
     this.logger.log(`Mascota eliminada (soft delete): ${id}`);
   }
 
-  async uploadPhoto(petId: string, companyId: string, fileBuffer: Buffer, mimeType: string) {
+  async uploadPhoto(petId: number, companyId: number, fileBuffer: Buffer, mimeType: string) {
     const pet = await this.prisma.pet.findFirst({
       where: { id: petId, companyId },
       include: { client: true, company: { select: { slug: true } } },
@@ -183,7 +183,7 @@ export class PetsService {
     return photo;
   }
 
-  async deletePhoto(petId: string, photoId: string, companyId: string) {
+  async deletePhoto(petId: number, photoId: number, companyId: number) {
     await this.findOne(petId, companyId);
 
     const photo = await this.prisma.petPhoto.findFirst({
@@ -201,12 +201,12 @@ export class PetsService {
     await this.prisma.petPhoto.delete({ where: { id: photoId } });
   }
 
-  async getMedicalRecords(id: string, companyId: string) {
+  async getMedicalRecords(id: number, companyId: number) {
     await this.findOne(id, companyId);
     return this.prisma.medicalRecord.findMany({
       where: { petId: id } as any,
       orderBy: { date: 'desc' },
       include: { procedures: true, prescriptions: true },
-    }).then((records: any) => records.filter(r => !r.isDeleted));
+    }).then((records: any) => records.filter((r: any) => !r.isDeleted));
   }
 }

@@ -1,42 +1,34 @@
 import { api } from '../services/api.js';
 import { router } from '../router.js';
-import { isAuthenticated, getToken } from '../stores/auth.store.js';
-
-import { renderDashboardLayout } from './sections/layout.js';
-import { loadHomeData, renderHomePage } from './sections/home.js';
-import { loadClientsData, renderClientsPage, showClientModal, showEditClientModal, deleteClient } from './sections/clients.js';
-import { loadPetsData, renderPetsPage, showPetModal, showAddPetModal, deletePet } from './sections/pets.js';
-import { loadMedicalRecordsData, renderMedicalRecordsPage, showEditRecordModal, deleteRecord, showAddRecordModal, recalcRecordTotal } from './sections/medical-records.js';
-import { loadPaymentsData, loadDebtsData, renderPaymentsPage, showAddPaymentModal, recalcPaymentTotal, showPaymentDetail, showQRModal } from './sections/payments.js';
-import { loadSuppliesData, renderSuppliesPage, showAddSupplyModal } from './sections/supplies.js';
-import { renderChatPage } from './sections/ai-chat.js';
-import { loadConnectionsData, renderConnectionsPage } from './sections/connections.js';
-import { renderCashRegisterPage } from './sections/cash-register.js';
-import { renderSettingsPage, loadPriceItemsData, renderSettingsPricesContent, showPriceModal, deletePriceItem } from './sections/settings.js';
-import { renderSuperAdminSubscriptions } from './sections/super-admin.js';
 
 let currentPage = 'home';
 let pageData = {};
-let cachedUser = null;
+const sectionCache = {};
 
-async function getOrFetchUser() {
-  if (cachedUser) return cachedUser;
-  cachedUser = await api.get('/auth/me');
-  return cachedUser;
-}
-
-function debounce(fn, delay = 300) {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
+async function loadSection(name) {
+  if (sectionCache[name]) return sectionCache[name];
+  switch (name) {
+    case 'layout': sectionCache[name] = await import('./sections/layout.js'); break;
+    case 'home': sectionCache[name] = await import('./sections/home.js'); break;
+    case 'clients': sectionCache[name] = await import('./sections/clients.js'); break;
+    case 'pets': sectionCache[name] = await import('./sections/pets.js'); break;
+    case 'medical-records': sectionCache[name] = await import('./sections/medical-records.js'); break;
+    case 'payments': sectionCache[name] = await import('./sections/payments.js'); break;
+    case 'supplies': sectionCache[name] = await import('./sections/supplies.js'); break;
+    case 'chat': sectionCache[name] = await import('./sections/ai-chat.js'); break;
+    case 'connections': sectionCache[name] = await import('./sections/connections.js'); break;
+    case 'cash-register': sectionCache[name] = await import('./sections/cash-register.js'); break;
+    case 'settings': sectionCache[name] = await import('./sections/settings.js'); break;
+    case 'super-admin': sectionCache[name] = await import('./sections/super-admin.js'); break;
+  }
+  return sectionCache[name];
 }
 
 function showImageView(imageUrl) {
   const overlay = document.createElement('div');
   overlay.className = 'image-viewer-overlay';
-  overlay.innerHTML = `<img src="${imageUrl}">`;
+  overlay.replaceChildren();
+  overlay.insertAdjacentHTML('beforeend', `<img src="${imageUrl}">`);
   overlay.addEventListener('click', () => overlay.remove());
   document.body.appendChild(overlay);
 }
@@ -45,337 +37,128 @@ window.showImageView = showImageView;
 export async function renderDashboard() {
   const app = document.getElementById('app');
   
-  console.log('[Dashboard] Render - isAuthenticated:', isAuthenticated());
-  console.log('[Dashboard] Render - token existe:', !!getToken());
-  console.log('[Dashboard] Render - token:', getToken() ? getToken().substring(0, 20) + '...' : null);
-  
   try {
     const user = await api.get('/auth/me');
-    console.log('[Dashboard] /auth/me response:', user);
-    
     if (!user) {
-      console.warn('[Dashboard] No user data, redirigiendo a login');
       router.navigate('/login');
       return;
     }
-    
     if (!user.companyId) {
-      console.warn('[Dashboard] Usuario sin company, redirigiendo a onboarding');
       router.navigate('/onboarding');
       return;
     }
-    
     user.company = user.company;
-    renderDashboardLayout(user, currentPage, loadPage);
+    const layout = await loadSection('layout');
+    layout.renderDashboardLayout(user, currentPage, loadPage);
   } catch (e) {
-    console.error('[Dashboard] Error fetching /auth/me:', e);
     if (e.message !== 'ONBOARDING_REQUIRED') {
       router.navigate('/login');
     }
   }
 }
 
-export async function renderDashboardHome() {
-  currentPage = 'home';
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
-  await loadHomeData(pageData);
-  return renderDashboardPage('home');
+function withDashboard(page, pageKey, loadFn, renderFn) {
+  return async () => {
+    currentPage = page;
+    if (pageKey) {
+      pageData[pageKey] = pageData[pageKey] || {};
+    }
+    if (!document.getElementById('page-content')) {
+      await renderDashboard();
+    }
+    if (loadFn) await loadFn(pageData);
+    return renderFn ? renderFn(pageData) : renderDashboardPage(page);
+  };
 }
 
-export async function renderClients() {
-  currentPage = 'clients';
-  pageData.clients = pageData.clients || { page: 1, search: '' };
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
-  await loadClientsData(pageData, pageData.clients.page, pageData.clients.search);
-  return renderDashboardPage('clients');
+function withSettings(page, loadFn) {
+  return async () => {
+    if (!document.getElementById('page-content')) {
+      try {
+        const user = await api.get('/auth/me');
+        if (!user || !user.companyId) { router.navigate('/onboarding'); return; }
+        const layout = await loadSection('layout');
+        layout.renderDashboardLayout(user, currentPage, loadPage);
+      } catch (e) { router.navigate('/login'); return; }
+    }
+    if (loadFn) await loadFn(pageData);
+    const settings = await loadSection('settings');
+    return settings.renderSettingsPage(page, pageData);
+  };
 }
 
-export async function renderPets() {
-  currentPage = 'pets';
-  pageData.pets = pageData.pets || { page: 1, search: '' };
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
-  await loadPetsData(pageData, pageData.pets.page, pageData.pets.search);
-  return renderDashboardPage('pets');
-}
-
-export async function renderMedicalRecords() {
-  currentPage = 'medical-records';
-  pageData.medicalRecords = pageData.medicalRecords || { page: 1, petId: '' };
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
-  await loadMedicalRecordsData(pageData, pageData.medicalRecords.page, pageData.medicalRecords.petId);
-  return renderDashboardPage('medical-records');
-}
-
-export async function renderPayments() {
-  currentPage = 'payments';
-  pageData.payments = pageData.payments || { page: 1, status: '' };
-  pageData.debts = pageData.debts || { page: 1, status: '' };
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
+export const renderDashboardHome = withDashboard('home', null, async (d) => {
+  const section = await loadSection('home');
+  await section.loadHomeData(d);
+});
+export const renderClients = withDashboard('clients', 'clients', async (d) => {
+  const section = await loadSection('clients');
+  await section.loadClientsData(d, d.clients.page, d.clients.search);
+});
+export const renderPets = withDashboard('pets', 'pets', async (d) => {
+  const section = await loadSection('pets');
+  await section.loadPetsData(d, d.pets.page, d.pets.search);
+});
+export const renderMedicalRecords = withDashboard('medical-records', 'medicalRecords', async (d) => {
+  const section = await loadSection('medical-records');
+  await section.loadMedicalRecordsData(d, d.medicalRecords.page, d.medicalRecords.petId);
+});
+export const renderPayments = withDashboard('payments', null, async (d) => {
+  const section = await loadSection('payments');
+  d.payments = d.payments || { page: 1, status: '' };
+  d.debts = d.debts || { page: 1, status: '' };
   await Promise.all([
-    loadPaymentsData(pageData, pageData.payments.page, pageData.payments.status),
-    loadDebtsData(pageData, pageData.debts.page, pageData.debts.status)
+    section.loadPaymentsData(d, d.payments.page, d.payments.status),
+    section.loadDebtsData(d, d.debts.page, d.debts.status)
   ]);
-  return renderDashboardPage('payments');
-}
-
-export async function renderSupplies() {
-  currentPage = 'supplies';
-  pageData.supplies = pageData.supplies || { page: 1, search: '' };
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
-  await loadSuppliesData(pageData, pageData.supplies.page, pageData.supplies.search);
-  return renderDashboardPage('supplies');
-}
-
-export async function renderAIChat() {
-  currentPage = 'chat';
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
-  return renderDashboardPage('chat');
-}
-
-export async function renderConnections() {
-  currentPage = 'connections';
-  pageData.connections = pageData.connections || { page: 1, status: '' };
-  
-  if (!document.getElementById('page-content')) {
-    await renderDashboard();
-    return;
-  }
-  
-  await loadConnectionsData(pageData, pageData.connections.page, pageData.connections.status);
-  return renderDashboardPage('connections');
-}
+});
+export const renderSupplies = withDashboard('supplies', 'supplies', async (d) => {
+  const section = await loadSection('supplies');
+  await section.loadSuppliesData(d, d.supplies.page, d.supplies.search);
+});
+export const renderAIChat = withDashboard('chat');
+export const renderConnections = withDashboard('connections', 'connections', async (d) => {
+  const section = await loadSection('connections');
+  await section.loadConnectionsData(d, d.connections.page, d.connections.status);
+});
 
 export async function renderDocuments() {
   currentPage = 'documents';
-  
   if (!document.getElementById('page-content')) {
     try {
       const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderDocuments:', e);
-      router.navigate('/login');
-      return;
-    }
+      if (!user || !user.companyId) { router.navigate('/onboarding'); return; }
+      const layout = await loadSection('layout');
+      layout.renderDashboardLayout(user, currentPage, loadPage);
+    } catch (e) { router.navigate('/login'); return; }
   }
-  
   const content = document.getElementById('page-content');
   if (content) {
-    content.innerHTML = '<div class="empty-state"><p>Sección de documentos en desarrollo</p></div>';
+    content.replaceChildren();
+    content.insertAdjacentHTML('beforeend', '<div class="empty-state" role="status"><p>Sección de documentos en desarrollo</p></div>');
   }
 }
 
-export async function renderSettings() {
-  currentPage = 'settings';
-  pageData.priceItems = pageData.priceItems || { page: 1, search: '' };
-  pageData.settingsConnections = pageData.settingsConnections || { page: 1, status: '' };
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderSettings:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  return renderSettingsPage('company', pageData);
-}
+export const renderSettings = withSettings('company');
+export const renderSettingsCompany = withSettings('company');
+export const renderSettingsSubscription = withSettings('subscription');
+export const renderSettingsMercadoPago = withSettings('mercadopago');
+export const renderSettingsAI = withSettings('ai');
+export const renderSettingsConnections = withSettings('connections', async (d) => {
+  const section = await loadSection('connections');
+  d.settingsConnections = d.settingsConnections || { page: 1, status: '' };
+  await section.loadConnectionsData(d, d.settingsConnections.page, d.settingsConnections.status);
+});
+export const renderExportData = withSettings('export');
+export const renderSettingsPrices = withSettings('prices', async (d) => {
+  const settings = await loadSection('settings');
+  d.priceItems = d.priceItems || { page: 1, search: '' };
+  await settings.loadPriceItemsData(d, d.priceItems.page, d.priceItems.search);
+});
 
-export async function renderSettingsCompany() {
-  currentPage = 'settings-company';
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderSettingsCompany:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  return renderSettingsPage('company', pageData);
-}
-
-export async function renderSettingsSubscription() {
-  currentPage = 'settings-subscription';
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderSettingsSubscription:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  return renderSettingsPage('subscription', pageData);
-}
-
-export async function renderSettingsMercadoPago() {
-  currentPage = 'settings-mercadopago';
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderSettingsMercadoPago:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  return renderSettingsPage('mercadopago', pageData);
-}
-
-export async function renderSettingsPrices() {
-  currentPage = 'settings-prices';
-  pageData.priceItems = pageData.priceItems || { page: 1, search: '' };
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderSettingsPrices:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  await loadPriceItemsData(pageData, pageData.priceItems.page, pageData.priceItems.search);
-  return renderSettingsPage('prices', pageData);
-}
-
-export async function renderSettingsAI() {
-  currentPage = 'settings-ai';
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderSettingsAI:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  return renderSettingsPage('ai', pageData);
-}
-
-export async function renderSettingsConnections() {
-  currentPage = 'settings-connections';
-  pageData.settingsConnections = pageData.settingsConnections || { page: 1, status: '' };
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderSettingsConnections:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  await loadConnectionsData(pageData, pageData.settingsConnections.page, pageData.settingsConnections.status);
-  return renderSettingsPage('connections', pageData);
-}
-
-export async function renderExportData() {
-  currentPage = 'settings-export';
-  
-  if (!document.getElementById('page-content')) {
-    try {
-      const user = await api.get('/auth/me');
-      if (!user || !user.companyId) {
-        router.navigate('/onboarding');
-        return;
-      }
-      renderDashboardLayout(user, currentPage, loadPage);
-    } catch (e) {
-      console.error('[Dashboard] Error en renderExportData:', e);
-      router.navigate('/login');
-      return;
-    }
-  }
-  
-  return renderSettingsPage('export', pageData);
+export async function renderSuperAdminSubscriptions() {
+  const section = await loadSection('super-admin');
+  section.renderSuperAdminSubscriptions(document.getElementById('app'));
 }
 
 export async function renderCashRegister() {
@@ -384,52 +167,44 @@ export async function renderCashRegister() {
     try {
       const user = await api.get('/auth/me');
       if (!user || !user.companyId) { router.navigate('/onboarding'); return; }
-      renderDashboardLayout(user, currentPage, loadPage);
+      const layout = await loadSection('layout');
+      layout.renderDashboardLayout(user, currentPage, loadPage);
     } catch (e) { router.navigate('/login'); return; }
   }
-  await renderCashRegisterPage(document.getElementById('page-content'), pageData);
+  const section = await loadSection('cash-register');
+  await section.renderCashRegisterPage(document.getElementById('page-content'), pageData);
 }
 
 async function renderDashboardPage(page) {
   const content = document.getElementById('page-content');
   if (!content) return;
-  
-  switch (page) {
-    case 'home': await renderHomePage(content, pageData); break;
-    case 'clients': await renderClientsPage(content, pageData); break;
-    case 'pets': await renderPetsPage(content, pageData); break;
-    case 'medical-records': await renderMedicalRecordsPage(content, pageData); break;
-    case 'payments': await renderPaymentsPage(content, pageData); break;
-    case 'supplies': await renderSuppliesPage(content, pageData); break;
-    case 'chat': await renderChatPage(content, pageData); break;
-    case 'connections': await renderConnectionsPage(content, pageData); break;
-  }
+  const section = await loadSection(page);
+  const renderMap = {
+    'home': section.renderHomePage,
+    'clients': section.renderClientsPage,
+    'pets': section.renderPetsPage,
+    'medical-records': section.renderMedicalRecordsPage,
+    'payments': section.renderPaymentsPage,
+    'supplies': section.renderSuppliesPage,
+    'chat': section.renderChatPage,
+    'connections': section.renderConnectionsPage,
+  };
+  const fn = renderMap[page];
+  if (fn) await fn(content, pageData);
 }
 
 async function loadPage(page) {
-  switch (page) {
-    case 'home':
-      await loadHomeData(pageData);
-      break;
-    case 'clients':
-      await loadClientsData(pageData, 1, '');
-      break;
-    case 'pets':
-      await loadPetsData(pageData, 1, '');
-      break;
-    case 'medical-records':
-      await loadMedicalRecordsData(pageData, 1, '');
-      break;
-    case 'payments':
-      await Promise.all([loadPaymentsData(pageData, 1, ''), loadDebtsData(pageData, 1, '')]);
-      break;
-    case 'supplies':
-      await loadSuppliesData(pageData, 1, '');
-      break;
-    case 'connections':
-      await loadConnectionsData(pageData, 1, '');
-      break;
-  }
-  
+  const section = await loadSection(page);
+  const loadMap = {
+    'home': () => section.loadHomeData(pageData),
+    'clients': () => section.loadClientsData(pageData, 1, ''),
+    'pets': () => section.loadPetsData(pageData, 1, ''),
+    'medical-records': () => section.loadMedicalRecordsData(pageData, 1, ''),
+    'payments': () => Promise.all([section.loadPaymentsData(pageData, 1, ''), section.loadDebtsData(pageData, 1, '')]),
+    'supplies': () => section.loadSuppliesData(pageData, 1, ''),
+    'connections': () => section.loadConnectionsData(pageData, 1, ''),
+  };
+  const fn = loadMap[page];
+  if (fn) await fn();
   await renderDashboardPage(page);
 }
