@@ -75,7 +75,7 @@ export function renderLogin() {
   });
   
   document.getElementById('google-btn').addEventListener('click', () => {
-    window.location.href = '/api/v1/auth/google';
+    window.location.href = `${import.meta.env.VITE_API_URL}/api/v1/auth/google`;
   });
 }
 
