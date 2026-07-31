@@ -224,10 +224,9 @@ export class MercadopagoService {
           externalRef = paymentData.external_reference;
           
             if (externalRef) {
-            const externalRefNum = Number(externalRef);
             // Buscar el pago en nuestra DB para obter companyId
             const payment = await this.prisma.payment.findUnique({
-              where: { id: externalRefNum },
+              where: { id: externalRef },
               include: { debt: true },
             });
 
@@ -253,7 +252,7 @@ export class MercadopagoService {
               const status = paymentData.status;
               if (status === 'approved') {
                 await this.prisma.payment.update({
-                  where: { id: externalRefNum },
+                  where: { id: externalRef },
                   data: { status: 'PAID', paidAmount: payment.totalAmount, paidAt: new Date(), mpPaymentId: id },
                 });
 
@@ -265,7 +264,7 @@ export class MercadopagoService {
                 }
                 // Registrar movimiento de caja
                 const existingMovement = await this.prisma.cashMovement.findFirst({
-                  where: { paymentId: externalRefNum }
+                  where: { paymentId: externalRef }
                 });
                 if (!existingMovement) {
                   await this.prisma.cashMovement.create({
@@ -274,29 +273,29 @@ export class MercadopagoService {
                       type: 'INCOME',
                       amount: payment.totalAmount,
                       reason: 'Pago recibido vía MercadoPago',
-                      paymentId: externalRefNum,
+                      paymentId: externalRef,
                     },
                   });
                 }
 
                 // Generar comprobante PDF
-                this.pdfService.generateAndStoreReceipt(externalRefNum, companyId).catch(e =>
+                this.pdfService.generateAndStoreReceipt(externalRef, companyId).catch(e =>
                   this.logger.error('Error generando comprobante desde webhook MP', e)
                 );
 
                 // Notificar en tiempo real
                 this.eventsGateway.emitToCompany(companyId, 'payment:confirmed', {
-                  paymentId: externalRefNum,
+                  paymentId: externalRef,
                   status: 'PAID',
                 });
 
-                this.logger.log(`Pago ${externalRefNum} aprobado para empresa ${companyId}`);
+                this.logger.log(`Pago ${externalRef} aprobado para empresa ${companyId}`);
               } else if (status === 'pending') {
                 await this.prisma.payment.update({
-                  where: { id: externalRefNum },
+                  where: { id: externalRef },
                   data: { status: 'PENDING', mpPaymentId: id },
                 });
-                this.logger.log(`Pago ${externalRefNum} pendiente para empresa ${companyId}`);
+                this.logger.log(`Pago ${externalRef} pendiente para empresa ${companyId}`);
               }
             }
           }

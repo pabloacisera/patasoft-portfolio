@@ -1,14 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SuppliesService } from './supplies.service';
 
-class MockWorkbook {
-  xlsx = { load: vi.fn().mockResolvedValue(undefined) };
-  getWorksheet = vi.fn();
-}
+const mockGetWorksheet = vi.fn();
+const mockXlsxLoad = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('exceljs', () => ({
-  Workbook: MockWorkbook,
-}));
+vi.mock('exceljs', () => {
+  class MockWorkbook {
+    xlsx = { load: mockXlsxLoad };
+    getWorksheet = mockGetWorksheet;
+  }
+  return { Workbook: MockWorkbook };
+});
 
 describe('SuppliesService', () => {
   let service: SuppliesService;
@@ -16,11 +18,12 @@ describe('SuppliesService', () => {
   let mockRag: any;
   let mockCloudinary: any;
   let mockEvents: any;
-  let mockWorkbook: MockWorkbook;
 
-  const companyId = 'company-1';
+  const companyId = 1;
 
   beforeEach(() => {
+    mockGetWorksheet.mockReset();
+    mockXlsxLoad.mockReset();
     mockPrisma = {
       supply: {
         findFirst: vi.fn(),
@@ -37,7 +40,6 @@ describe('SuppliesService', () => {
     mockRag = { upsertEmbedding: vi.fn(), deleteEmbedding: vi.fn() };
     mockCloudinary = { getClient: vi.fn().mockReturnValue({ uploader: { upload: vi.fn() } }) };
     mockEvents = { emitToCompany: vi.fn() };
-    mockWorkbook = new MockWorkbook();
 
     service = new SuppliesService(
       mockPrisma,
@@ -53,7 +55,7 @@ describe('SuppliesService', () => {
       const row3 = { getCell: vi.fn((col) => ({ text: col === 1 ? 'Guantes latex' : '', value: col >= 7 ? 50 : undefined })) };
       const emptyRow = { getCell: vi.fn(() => ({ text: '', value: undefined })) };
 
-      mockWorkbook.getWorksheet.mockReturnValue({
+      mockGetWorksheet.mockReturnValue({
         rowCount: 3,
         getRow: vi.fn((rowNum) => {
           if (rowNum === 2) return row2;
@@ -62,17 +64,19 @@ describe('SuppliesService', () => {
         }),
       });
 
+      const supply1 = { id: 'supply-1', name: 'Jeringa 10ml', brand: 'BD', quantity: 10, unit: 'unidades', unitPrice: 50, minQuantity: 5 };
+      const supply2 = { id: 'supply-2', name: 'Guantes latex', brand: 'Ansell', quantity: 50, unit: 'cajas', unitPrice: 200, minQuantity: 10 };
+
+      // findFirst order: existence check Jeringa → get-after-create Jeringa → existence check Guantes → get-after-create Guantes
       mockPrisma.supply.findFirst
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(null);
+        .mockResolvedValueOnce(supply1)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(supply2);
 
       mockPrisma.supply.create
-        .mockResolvedValueOnce({ id: 'supply-1', name: 'Jeringa 10ml', brand: 'BD', quantity: 10, unit: 'unidades', unitPrice: 50, minQuantity: 5 })
-        .mockResolvedValueOnce({ id: 'supply-2', name: 'Guantes latex', brand: 'Ansell', quantity: 50, unit: 'cajas', unitPrice: 200, minQuantity: 10 });
-
-      mockPrisma.supply.findUnique
-        .mockResolvedValueOnce({ id: 'supply-1', name: 'Jeringa 10ml', brand: 'BD', quantity: 10, unit: 'unidades', unitPrice: 50, minQuantity: 5 })
-        .mockResolvedValueOnce({ id: 'supply-2', name: 'Guantes latex', brand: 'Ansell', quantity: 50, unit: 'cajas', unitPrice: 200, minQuantity: 10 });
+        .mockResolvedValueOnce(supply1)
+        .mockResolvedValueOnce(supply2);
 
       const buffer = Buffer.from('fake excel content');
       const result = await service.importFromExcel(companyId, buffer);
@@ -95,7 +99,7 @@ describe('SuppliesService', () => {
       const row2 = { getCell: vi.fn((col) => ({ text: col === 1 ? 'Jeringa 10ml' : '', value: col >= 7 ? 20 : undefined })) };
       const emptyRow = { getCell: vi.fn(() => ({ text: '', value: undefined })) };
 
-      mockWorkbook.getWorksheet.mockReturnValue({
+      mockGetWorksheet.mockReturnValue({
         rowCount: 2,
         getRow: vi.fn((rowNum) => {
           if (rowNum === 2) return row2;
