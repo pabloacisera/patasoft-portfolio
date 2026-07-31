@@ -136,6 +136,17 @@ export class LocalRagService implements OnModuleInit, OnModuleDestroy {
     return { added: totalAdded, failed: totalFailed, verified, status: totalFailed > 0 ? 'partial' : 'success' };
   }
 
+  async countDocuments(companyId: number): Promise<number> {
+    if (!this.isInitialized) return 0;
+    const client = await this.pool.connect();
+    try {
+      const res = await client.query('SELECT COUNT(*)::int AS count FROM langchain_vectors WHERE company_id = $1', [companyId]);
+      return res.rows[0]?.count ?? 0;
+    } finally {
+      client.release();
+    }
+  }
+
   async upsertEmbedding(companyId: number, content: string, metadata: Record<string, any>) {
     if (!this.isInitialized) return;
     try {
