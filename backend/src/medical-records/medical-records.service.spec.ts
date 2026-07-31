@@ -10,14 +10,16 @@ describe('MedicalRecordsService', () => {
   let mockCashService: any;
   let mockDocumentProcessor: any;
   let mockSuppliesService: any;
+  let mockPetsService: any;
 
-  const companyId = 'company-1';
+  const companyId = 1;
 
   beforeEach(() => {
     const mockTx = {
-      medicalRecord: { create: vi.fn() },
-      supply: { findUnique: vi.fn(), update: vi.fn() },
-      payment: { create: vi.fn() },
+      medicalRecord: { create: vi.fn(), update: vi.fn() },
+      supply: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+      payment: { create: vi.fn(), update: vi.fn() },
+      debt: { update: vi.fn() },
     };
 
     mockPrisma = {
@@ -76,7 +78,10 @@ describe('MedicalRecordsService', () => {
     mockSuppliesService = {
       deductStock: vi.fn().mockResolvedValue(undefined),
     };
-    service = new MedicalRecordsService(mockPrisma, mockPdfService, mockRag, mockCashService, mockDocumentProcessor, mockSuppliesService);
+    mockPetsService = {
+      findOne: vi.fn().mockResolvedValue({ id: 1, name: 'Rex', clientId: 1, client: { id: 1, name: 'Juan' } }),
+    };
+    service = new MedicalRecordsService(mockPrisma, mockPdfService, mockRag, mockCashService, mockDocumentProcessor, mockSuppliesService, mockPetsService);
   });
 
   describe('findAll', () => {
@@ -406,6 +411,106 @@ describe('MedicalRecordsService', () => {
       const result = await service.addPrescription('rec-1', companyId, { medicineName: 'Amoxicilina', dose: '5ml' });
 
       expect(result.medicineName).toBe('Amoxicilina');
+    });
+  });
+
+  describe('cancel (FLUJO CRÍTICO)', () => {
+    const baseRecordWithPayment = {
+      id: 1,
+      petId: 1,
+      isDeleted: false,
+      pet: { id: 1, name: 'Rex', clientId: 1, client: { id: 1, name: 'Juan' } },
+      procedures: [{ id: 1, supplyId: 1, quantity: 2, name: 'Inyección' }],
+      prescriptions: [{ id: 1, supplyId: 2, soldInClinic: true, dispensingQuantity: 3, quantity: 3, name: 'Amoxicilina' }],
+      payment: {
+        id: 10,
+        method: 'CASH',
+        status: 'PAID',
+        totalAmount: 5000,
+        items: [{ description: 'Jeringa descartable', quantity: 5 }],
+        debt: null,
+      },
+    };
+
+    beforeEach(() => {
+      mockPrisma.pet.findMany.mockResolvedValue([{ id: 1 }]);
+      mockPrisma.medicalRecord.findFirst.mockResolvedValue(baseRecordWithPayment);
+      mockPrisma._tx.payment.update.mockResolvedValue({});
+      mockPrisma._tx.medicalRecord.update.mockResolvedValue({ ...baseRecordWithPayment, isDeleted: true });
+      mockPrisma._tx.supply.findFirst.mockResolvedValue({ id: 99, name: 'Jeringa descartable' });
+      mockSuppliesService.restoreStock = vi.fn().mockResolvedValue(undefined);
+      mockCashService.reverseFromPayment = vi.fn().mockResolvedValue(undefined);
+    });
+
+    it('should restore stock for procedures with supplyId', async () => {
+      await service.cancel(1, companyId);
+
+      expect(mockSuppliesService.restoreStock).toHaveBeenCalledWith(companyId, 1, 2, expect.anything());
+    });
+
+    it('should restore stock for prescriptions soldInClinic', async () => {
+      await service.cancel(1, companyId);
+
+      expect(mockSuppliesService.restoreStock).toHaveBeenCalledWith(companyId, 2, 3, expect.anything());
+    });
+
+    it('should reverse cash movement for CASH+PAID payment', async () => {
+      await service.cancel(1, companyId);
+
+      expect(mockCashService.reverseFromPayment).toHaveBeenCalledWith(companyId, 10, expect.anything());
+    });
+
+    it('should mark payment as CANCELLED', async () => {
+      await service.cancel(1, companyId);
+
+      expect(mockPrisma._tx.payment.update).toHaveBeenCalledWith({
+        where: { id: 10 },
+        data: expect.objectContaining({ status: 'CANCELLED', isDeleted: true }),
+      });
+    });
+
+    it('should soft delete the medical record', async () => {
+      await service.cancel(1, companyId);
+
+      expect(mockPrisma._tx.medicalRecord.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: expect.objectContaining({ isDeleted: true }),
+      });
+    });
+
+    it('should delete RAG embedding', async () => {
+      await service.cancel(1, companyId);
+
+      expect(mockRag.deleteEmbedding).toHaveBeenCalledWith(
+        companyId,
+        { source: 'medicalrecord', recordId: 1 },
+      );
+    });
+
+    it('should throw BadRequestException if record is already cancelled', async () => {
+      mockPrisma.medicalRecord.findFirst.mockResolvedValue({ ...baseRecordWithPayment, isDeleted: true });
+
+      await expect(service.cancel(1, companyId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for non-CASH paid payment', async () => {
+      mockPrisma.medicalRecord.findFirst.mockResolvedValue({
+        ...baseRecordWithPayment,
+        payment: { ...baseRecordWithPayment.payment, method: 'TRANSFER' },
+      });
+
+      await expect(service.cancel(1, companyId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should NOT reverse cash movement for non-CASH payment', async () => {
+      mockPrisma.medicalRecord.findFirst.mockResolvedValue({
+        ...baseRecordWithPayment,
+        payment: { ...baseRecordWithPayment.payment, method: 'TRANSFER', status: 'PENDING' },
+      });
+
+      await service.cancel(1, companyId);
+
+      expect(mockCashService.reverseFromPayment).not.toHaveBeenCalled();
     });
   });
 });
