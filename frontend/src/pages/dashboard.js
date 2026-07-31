@@ -73,6 +73,7 @@ function withDashboard(page, pageKey, loadFn, renderFn) {
 
 function withSettings(page, loadFn) {
   return async () => {
+    currentPage = 'settings';
     if (!document.getElementById('page-content')) {
       try {
         const user = await api.get('/auth/me');
