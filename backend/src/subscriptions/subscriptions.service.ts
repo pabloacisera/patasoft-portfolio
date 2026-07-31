@@ -29,7 +29,14 @@ export class SubscriptionsService {
       throw new NotFoundException('Suscripción no encontrada');
     }
 
-    return subscription;
+    return {
+      ...subscription,
+      trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
+      expiresAt: subscription.expiresAt?.toISOString() ?? null,
+      startedAt: subscription.startedAt.toISOString(),
+      createdAt: subscription.createdAt.toISOString(),
+      updatedAt: subscription.updatedAt.toISOString(),
+    };
   }
 
   async createCheckout(companyId: number, dto: CreateSubscriptionCheckoutDto) {

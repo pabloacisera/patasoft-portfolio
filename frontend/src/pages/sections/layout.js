@@ -160,7 +160,8 @@ export async function checkAndShowTrialBanner() {
     if (!sub || sub.status !== 'TRIAL') return;
     const now = new Date();
     const trialEnd = sub.trialEndsAt ? new Date(sub.trialEndsAt) : null;
-    const hoursLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60))) : 0;
+    if (!trialEnd || isNaN(trialEnd.getTime())) return;
+    const hoursLeft = Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60)));
     const daysLeft = Math.floor(hoursLeft / 24);
     const timeText = hoursLeft < 24 ? `${hoursLeft} horas` : `${daysLeft} días`;
 

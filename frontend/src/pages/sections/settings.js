@@ -162,8 +162,8 @@ async function renderSettingsSubscriptionContent(content, pageData) {
   const now = new Date();
   const trialEnd = sub.trialEndsAt ? new Date(sub.trialEndsAt) : null;
   const expireEnd = sub.expiresAt ? new Date(sub.expiresAt) : null;
-  const trialDaysLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24))) : 0;
-  const expireDaysLeft = expireEnd ? Math.max(0, Math.ceil((expireEnd - now) / (1000 * 60 * 60 * 24))) : 0;
+  const trialDaysLeft = trialEnd && !isNaN(trialEnd.getTime()) ? Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24))) : 0;
+  const expireDaysLeft = expireEnd && !isNaN(expireEnd.getTime()) ? Math.max(0, Math.ceil((expireEnd - now) / (1000 * 60 * 60 * 24))) : 0;
 
   const statusLabels = { TRIAL: 'Prueba gratuita', ACTIVE: 'Activo', EXPIRED: 'Expirado', CANCELLED: 'Cancelado', BLOCKED: 'Bloqueado' };
   const statusBadgeClass = { TRIAL: 'badge-trial', ACTIVE: 'badge-active', EXPIRED: 'badge-expired', CANCELLED: 'badge-cancelled', BLOCKED: 'badge-expired' };
